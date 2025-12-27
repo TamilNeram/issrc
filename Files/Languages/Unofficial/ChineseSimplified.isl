@@ -1,4 +1,4 @@
-; *** Inno Setup version 6.4.0+ Chinese Simplified messages ***
+; *** Inno Setup version 6.5.0+ Chinese Simplified messages ***
 ;
 ; To download user-contributed translations of this file, go to:
 ;   https://jrsoftware.org/files/istrans/
@@ -29,13 +29,11 @@ LanguageCodePage=936
 ; If the language you are translating to requires special font faces or
 ; sizes, uncomment any of the following entries and change them accordingly.
 ;DialogFontName=
-;DialogFontSize=8
-;WelcomeFontName=Verdana
-;WelcomeFontSize=12
-;TitleFontName=Arial
-;TitleFontSize=29
-;CopyrightFontName=Arial
-;CopyrightFontSize=8
+;DialogFontSize=9
+;DialogFontBaseScaleWidth=7
+;DialogFontBaseScaleHeight=15
+;WelcomeFontName=Segoe UI
+;WelcomeFontSize=14
 
 [Messages]
 
@@ -79,11 +77,11 @@ UninstallAppRunningError=卸载程序发现 %1 当前正在运行。%n%n请先�
 PrivilegesRequiredOverrideTitle=选择安装程序模式
 PrivilegesRequiredOverrideInstruction=选择安装模式
 PrivilegesRequiredOverrideText1=%1 可以为所有用户安装(需要管理员权限)，或仅为您安装。
-PrivilegesRequiredOverrideText2=%1 只能为您安装，或为所有用户安装(需要管理员权限)。
+PrivilegesRequiredOverrideText2=%1 可以仅为您安装，或为所有用户安装(需要管理员权限)。
 PrivilegesRequiredOverrideAllUsers=为所有用户安装(&A)
 PrivilegesRequiredOverrideAllUsersRecommended=为所有用户安装(&A) (建议选项)
-PrivilegesRequiredOverrideCurrentUser=只为我安装(&M)
-PrivilegesRequiredOverrideCurrentUserRecommended=只为我安装(&M) (建议选项)
+PrivilegesRequiredOverrideCurrentUser=仅为我安装(&M)
+PrivilegesRequiredOverrideCurrentUserRecommended=仅为我安装(&M) (建议选项)
 
 ; *** 其他错误
 ErrorCreatingDir=安装程序无法创建目录“%1”
@@ -222,22 +220,25 @@ ReadyMemoComponents=已选择组件：
 ReadyMemoGroup=开始菜单文件夹：
 ReadyMemoTasks=附加任务：
 
-; *** TExtractionWizardPage wizard page and Extract7ZipArchive
-ExtractionLabel=正在提取附加文件...
-ButtonStopExtraction=停止提取(&S)
-StopExtraction=您确定要停止提取吗？
-ErrorExtractionAborted=提取已中止
-ErrorExtractionFailed=提取失败：%1
+; *** TExtractionWizardPage 向导页面与 ExtractArchive
+ExtractingLabel=正在解压文件...
+ButtonStopExtraction=停止解压(&S)
+StopExtraction=您确定要停止解压吗？
+ErrorExtractionAborted=解压已中止
+ErrorExtractionFailed=解压失败：%1
 
-; *** TDownloadWizardPage wizard page and DownloadTemporaryFile
-DownloadingLabel=正在下载附加文件...
+; *** 压缩文件解压失败详情
+ArchiveIncorrectPassword=压缩文件密码不正确
+ArchiveIsCorrupted=压缩文件已损坏
+ArchiveUnsupportedFormat=不支持的压缩文件格式
+
+; *** TDownloadWizardPage 向导页面和 DownloadTemporaryFile
+DownloadingLabel2=正在下载文件...
 ButtonStopDownload=停止下载(&S)
 StopDownload=您确定要停止下载吗？
 ErrorDownloadAborted=下载已中止
 ErrorDownloadFailed=下载失败：%1 %2
 ErrorDownloadSizeFailed=获取下载大小失败：%1 %2
-ErrorFileHash1=校验文件哈希失败：%1
-ErrorFileHash2=无效的文件哈希：预期 %1，实际 %2
 ErrorProgress=无效的进度：%1 / %2
 ErrorFileSize=文件大小错误：预期 %1，实际 %2
 
@@ -279,17 +280,21 @@ PathLabel=路径(&P)：
 FileNotInDir2=“%2”中找不到文件“%1”。请插入正确的磁盘或选择其他文件夹。
 SelectDirectoryLabel=请指定下一张磁盘的位置。
 
-; *** 安装状态消息
+; *** 安装阶段消息
 SetupAborted=安装程序未完成安装。%n%n请修正这个问题并重新运行安装程序。
 AbortRetryIgnoreSelectAction=选择操作
 AbortRetryIgnoreRetry=重试(&T)
 AbortRetryIgnoreIgnore=忽略错误并继续(&I)
 AbortRetryIgnoreCancel=关闭安装程序
+RetryCancelSelectAction=选择操作
+RetryCancelRetry=重试(&T)
+RetryCancelCancel=取消(&C)
 
 ; *** 安装状态消息
 StatusClosingApplications=正在关闭应用程序...
 StatusCreateDirs=正在创建目录...
-StatusExtractFiles=正在解压缩文件...
+StatusExtractFiles=正在提取文件...
+StatusDownloadFiles=正在下载文件...
 StatusCreateIcons=正在创建快捷方式...
 StatusCreateIniEntries=正在创建 INI 条目...
 StatusCreateRegistryEntries=正在创建注册表条目...
@@ -319,6 +324,14 @@ FileAbortRetryIgnoreSkipNotRecommended=跳过此文件(&S) (不推荐)
 FileAbortRetryIgnoreIgnoreNotRecommended=忽略错误并继续(&I) (不推荐)
 SourceIsCorrupted=源文件已损坏
 SourceDoesntExist=源文件“%1”不存在
+SourceVerificationFailed=源文件验证失败: %1
+VerificationSignatureDoesntExist=签名文件“%1”不存在
+VerificationSignatureInvalid=签名文件“%1”无效
+VerificationKeyNotFound=签名文件“%1”使用了未知密钥
+VerificationFileNameIncorrect=文件名不正确
+VerificationFileTagIncorrect=文件标签不正确
+VerificationFileSizeIncorrect=文件大小不正确
+VerificationFileHashIncorrect=文件哈希值不正确
 ExistingFileReadOnly2=无法替换现有文件，它是只读的。
 ExistingFileReadOnlyRetry=移除只读属性并重试(&R)
 ExistingFileReadOnlyKeepExisting=保留现有文件(&K)
@@ -337,6 +350,8 @@ ErrorChangingAttr=尝试更改下列现有文件的属性时出错：
 ErrorCreatingTemp=尝试在目标目录创建文件时出错：
 ErrorReadingSource=尝试读取下列源文件时出错：
 ErrorCopying=尝试复制下列文件时出错：
+ErrorDownloading=下载文件时出错：
+ErrorExtracting=解压压缩文件时出错：
 ErrorReplacingExistingFile=尝试替换现有文件时出错：
 ErrorRestartReplace=重启并替换失败：
 ErrorRenamingTemp=尝试重命名下列目标目录中的一个文件时出错：

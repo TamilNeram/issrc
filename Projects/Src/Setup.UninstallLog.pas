@@ -12,16 +12,30 @@ unit Setup.UninstallLog;
 interface
 
 uses
-  Windows, SysUtils, Shared.Int64Em, Shared.FileClass, Shared.CommonFunc;
+  Windows, SysUtils, Shared.FileClass, Shared.CommonFunc;
 
 const
-  HighestSupportedVersion = 1048;
-  { Each time the format of the uninstall log changes (usually a new entry type
-    is added), HighestSupportedVersion and the file version number of Setup
-    are incremented to match (51.x). Do NOT do this yourself; doing so could cause
-    incompatibilities with future Inno Setup releases. It's recommended that you
-    use the "utUserDefined" log entry type if you wish to implement your own
-    custom uninstall log entries; see below for more information. }
+  HighestSupportedHeaderVersion = 1054;
+  { Each time the format of the uninstall log changes, HighestSupportedHeaderVersion
+    must be incremented, even if the change seems backward compatible (such as
+    adding a new flag, or using one of the Reserved slots). When this happens, the
+    file version number of Setup must also be incremented to match (51.x).
+
+    The file version number (but not HighestSupportedHeaderVersion) must also be
+    incremented when an improvement or bugfix to Uninstall is made. Failing to do
+    so can cause older installers to replace the uninstaller .exe with an older
+    and inferior version. Next time HighestSupportedHeaderVersion is incremented
+    (along with the file version number), it should 'jump' ahead so both numbers
+    are in sync again. While technically not required, this approach keeps things
+    more sensible.
+
+    Adding [Code] functions does not require bumping the file version number as a
+    utCompiledCode record is associated with one specific SetupBinVersion number.
+
+    If you want to customize the uninstall log but maintain compatibility with
+    official Inno Setup releases, you should NOT do any of the above. Instead, it's
+    recommended to use the "utUserDefined" log entry type if you wish to implement
+    your own custom uninstall log entries; see below for more information. }
 
 type
   TUninstallRecTyp = type Word;
@@ -37,7 +51,7 @@ const
   utUserDefined          = $01;
   utStartInstall         = $10;
   utEndInstall           = $11;
-  utCompiledCode         = $20;
+  utCompiledCode         = $20; { SetupBinVersion as ExtraData, or-ed with $80000000 on Win64 }
   utRun                  = $80;
   utDeleteDirOrFiles     = $81;
   utDeleteFile           = $82;
@@ -101,16 +115,22 @@ type
 
   TDeleteUninstallDataFilesProc = procedure;
 
+  PUninstallLogFlags = ^TUninstallLogFlags;
   TUninstallLogFlags = set of (ufAdminInstalled, ufDontCheckRecCRCs,
-    ufModernStyle, ufAlwaysRestart, ufChangesEnvironment, ufWin64,
-    ufPowerUserInstalled, ufAdminInstallMode);
+    ufDoNotUse0, ufAlwaysRestart, ufChangesEnvironment, ufWin64,
+    ufPowerUserInstalled, ufAdminInstallMode,
+    ufDoNotUse1, ufDoNotUse2, ufDoNotUse3, ufDoNotUse4, ufDoNotUse5,
+    { ^ these and also ufDoNotUse0 cannot be used again, were used for ufWizardModern,
+        ufWizardDarkStyleDark, ufWizardDarkStyleDynamic, ufWizardBorderStyled,
+        ufWizardLightButtonsUnstyled, and ufWizardKeepAspectRatio }
+    ufRedirectionGuard);
 
   TUninstallLog = class
   private
     FList, FLastList: PUninstallRec;
     FCount: Integer;
     class function AllocRec(const Typ: TUninstallRecTyp;
-      const ExtraData: Longint; const DataSize: Integer): PUninstallRec;
+      const ExtraData: Longint; const DataSize: Cardinal): PUninstallRec;
     function Delete(const Rec: PUninstallRec): PUninstallRec;
     procedure InternalAdd(const NewRec: PUninstallRec);
   protected
@@ -130,7 +150,8 @@ type
     procedure AddReg(const Typ: TUninstallRecTyp; const RegView: TRegView;
       const RootKey: HKEY; const Data: array of String);
     function CanAppend(const Filename: String;
-      var ExistingFlags: TUninstallLogFlags): Boolean;
+      var ExistingFlags: TUninstallLogFlags): Boolean; overload;
+    function CanAppend(const Filename: String): Boolean; overload;
     function CheckMutexes: Boolean;
     procedure Clear;
     class function ExtractRecData(const Rec: PUninstallRec;
@@ -155,21 +176,25 @@ implementation
 
 uses
   Messages, ShlObj, AnsiStrings,
+  UnsignedFunc,
   PathFunc, Shared.Struct, SetupLdrAndSetup.Messages, Shared.SetupMessageIDs, Setup.InstFunc,
-  Setup.InstFunc.Ole, SetupLdrAndSetup.RedirFunc, Compression.Base,
+  Setup.InstFunc.Ole, Setup.RedirFunc, Compression.Base,
   Setup.LoggingFunc, Setup.RegDLL, Setup.Helper, Setup.DotNetFunc;
 
 type
   { Note: TUninstallLogHeader should stay <= 512 bytes in size, so that it
-    fits into a single disk sector and can be written atomically }
+    fits into a single disk sector and can be written atomically.
+    Do not add "non-sticky" appearance flags and fields that are set only
+    by the latest installer. Add these to TMessagesLangOptions instead. }
   TUninstallLogHeader = packed record
     ID: TUninstallLogID;
     AppId: array[0..127] of AnsiChar;
     AppName: array[0..127] of AnsiChar;
     Version, NumRecs: Integer;
-    EndOffset: LongWord;
-    Flags: Longint;
-    Reserved: array[0..26] of Longint;  { reserved for future use }
+    EndOffset: UInt32;
+    Flags: Integer;
+    DoNotUse0, DoNotUse1: Integer; { cannot be used again, were used for WizardSizePercentX and WizardSizePercentY }
+    Reserved: array[0..24] of Integer;  { reserved for future use }
     CRC: Longint;
   end;
   TUninstallCrcHeader = packed record
@@ -178,7 +203,7 @@ type
   end;
   TUninstallFileRec = packed record
     Typ: TUninstallRecTyp;
-    ExtraData: Longint;
+    ExtraData: Integer;
     DataSize: Cardinal;
   end;
 
@@ -215,7 +240,7 @@ var
   Header64Bit: Boolean;
 begin
   ReadUninstallLogHeader(F, Filename, Header, Header64Bit);
-  Result := TUninstallLogFlags((@Header.Flags)^);
+  Result := PUninstallLogFlags(@Header.Flags)^;
 end;
 
 { Misc. uninstallation functions }
@@ -334,17 +359,17 @@ begin
 end;
 
 class function TUninstallLog.AllocRec(const Typ: TUninstallRecTyp;
-  const ExtraData: Longint; const DataSize: Integer): PUninstallRec;
+  const ExtraData: Longint; const DataSize: Cardinal): PUninstallRec;
 { Allocates a new PUninstallRec, but does not add it to the list. Returns nil
   if the value of the DataSize parameter is out of range. }
 begin
   { Sanity check the size to protect against integer overflows. 128 MB should
     be way more than enough. }
-  if (DataSize < 0) or (DataSize > $08000000) then begin
+  if DataSize > $08000000 then begin
     Result := nil;
     Exit;
   end;
-  Result := AllocMem(Integer(@PUninstallRec(nil).Data) + DataSize);
+  Result := AllocMem(NativeInt(Cardinal(@PUninstallRec(nil).Data) + DataSize));
   Result.Typ := Typ;
   Result.ExtraData := ExtraData;
   Result.DataSize := DataSize;
@@ -368,17 +393,17 @@ end;
 procedure TUninstallLog.Add(const Typ: TUninstallRecTyp; const Data: array of String;
   const ExtraData: Longint);
 var
-  I, L: Integer;
+  L: Integer;
   S, X: AnsiString;
   AData: AnsiString;
   NewRec: PUninstallRec;
 begin
-  for I := 0 to High(Data) do begin
+  for var I := 0 to High(Data) do begin
     L := Length(Data[I])*SizeOf(Data[I][1]);
 
     SetLength(X, SizeOf(Byte) + SizeOf(Integer));
     X[1] := AnsiChar($FE);
-    Integer((@X[2])^) := Integer(-L);
+    PInteger(@X[2])^ := -L;
     S := S + X;
 
     SetString(AData, PAnsiChar(Pointer(Data[I])), L);
@@ -386,21 +411,19 @@ begin
   end;
   S := S + AnsiChar($FF);
 
-  NewRec := AllocRec(Typ, ExtraData, Length(S)*SizeOf(S[1]));
+  NewRec := AllocRec(Typ, ExtraData, ULength(S)*SizeOf(S[1]));
   if NewRec = nil then
     InternalError('DataSize range exceeded');
-  Move(Pointer(S)^, NewRec.Data, NewRec.DataSize);
+  UMove(Pointer(S)^, NewRec.Data, NewRec.DataSize);
   InternalAdd(NewRec);
 
-  if Version < HighestSupportedVersion then
-    Version := HighestSupportedVersion;
+  if Version < HighestSupportedHeaderVersion then
+    Version := HighestSupportedHeaderVersion;
 end;
 
 procedure TUninstallLog.AddReg(const Typ: TUninstallRecTyp;
   const RegView: TRegView; const RootKey: HKEY; const Data: array of String);
 { Adds a new utReg* type entry }
-var
-  ExtraData: Longint;
 begin
   { If RootKey isn't a predefined key, or has unrecognized garbage in the
     high byte (which we use for our own purposes), reject it }
@@ -409,7 +432,7 @@ begin
 
   { ExtraData in a utReg* entry consists of a root key value (HKEY_*)
     OR'ed with flag bits in the high byte }
-  HKEY(ExtraData) := RootKey;
+  var ExtraData := Integer(UInt32(RootKey));
   if RegView in RegViews64Bit then
     ExtraData := ExtraData or utReg_64BitKey;
   Add(Typ, Data, ExtraData);
@@ -433,7 +456,7 @@ begin
 end;
 
 procedure TUninstallLog.Clear;
-{ Frees all entries in the uninstall list and clears AppName/AppDir }
+{ Frees all entries in the uninstall list and clears AppId/AppName/Flags }
 begin
   while FLastList <> nil do
     Delete(FLastList);
@@ -477,13 +500,13 @@ end;
 class function TUninstallLog.ExtractRecData(const Rec: PUninstallRec;
   var Data: array of String): Integer;
 var
-  I, L: Integer;
-  X: ^Byte;
+  L: Integer;
+  X: PByte;
 begin
-  for I := 0 to High(Data) do
+  for var I := 0 to High(Data) do
     Data[I] := '';
-  I := 0;
-  X := @Rec^.Data;
+  var I := 0;
+  X := PByte(@Rec^.Data);
   while I <= High(Data) do begin
     case X^ of
       $00..$FC: begin
@@ -492,12 +515,12 @@ begin
          end;
       $FD: begin
            Inc(X);
-           L := Word(Pointer(X)^);
+           L := PWord(X)^;
            Inc(X, SizeOf(Word));
          end;
       $FE: begin
            Inc(X);
-           L := Integer(Pointer(X)^);
+           L := PInteger(X)^;
            Inc(X, SizeOf(Integer));
          end;
       $FF: Break;
@@ -738,7 +761,7 @@ var
   ShouldDeleteRec, IsTempFile, IsSharedFile, SharedCountDidReachZero: Boolean;
   Filename, Section, Key: String;
   Subkey, ValueName: PChar;
-  P, ErrorCode: Integer;
+  P: Integer;
   RegView: TRegView;
   RootKey, K: HKEY;
   Wait: TExecWait;
@@ -817,6 +840,7 @@ begin
                   try
                     if GetLogActive and (CurRec^.ExtraData and utRun_LogOutput <> 0) then
                       OutputReader := TCreateProcessOutputReader.Create(RunExecLog, 0);
+                    var ErrorCode: DWORD;
                     if not InstExec(CurRec^.ExtraData and utRun_DisableFsRedir <> 0,
                        CurRecData[0], CurRecData[1], CurRecData[2], Wait,
                        ShowCmd, ProcessMessagesProc, OutputReader, ErrorCode) then begin
@@ -841,6 +865,7 @@ begin
                    FileOrDirExists(CurRecData[0]) then begin
                   if CurRec^.ExtraData and utRun_ShellExecRespectWaitFlags = 0 then
                     Wait := ewNoWait;
+                  var ErrorCode: DWORD;
                   if not InstShellExec(CurRecData[4], CurRecData[0], CurRecData[1], CurRecData[2],
                      Wait, ShowCmd, ProcessMessagesProc, ErrorCode) then begin
                     LogFmt('ShellExecuteEx failed (%d).', [ErrorCode]);
@@ -1026,7 +1051,7 @@ begin
               CrackRegExtraData(CurRec^.ExtraData, RegView, RootKey);
               Subkey := CurRecDataPChar[0];
               LogFmt('Deleting registry key: %s\%s', [GetRegRootKeyName(RootKey), Subkey]);
-              ErrorCode := RegDeleteKeyIncludingSubkeys(RegView, RootKey, Subkey);
+              const ErrorCode = RegDeleteKeyIncludingSubkeys(RegView, RootKey, Subkey);
               if not (ErrorCode in [ERROR_SUCCESS, ERROR_FILE_NOT_FOUND]) then begin
                 LogFmt('Deletion failed (%d).', [ErrorCode]);
                 Result := False;
@@ -1038,7 +1063,7 @@ begin
               ValueName := CurRecDataPChar[1];
               LogFmt('Clearing registry value: %s\%s\%s', [GetRegRootKeyName(RootKey), Subkey, ValueName]);
               if RegOpenKeyExView(RegView, RootKey, Subkey, 0, KEY_SET_VALUE, K) = ERROR_SUCCESS then begin
-                ErrorCode := RegSetValueEx(K, ValueName, 0, REG_SZ, @NullChar, SizeOf(NullChar));
+                const ErrorCode = RegSetValueEx(K, ValueName, 0, REG_SZ, @NullChar, SizeOf(NullChar));
                 if ErrorCode <> ERROR_SUCCESS then begin
                   LogFmt('RegSetValueEx failed (%d).', [ErrorCode]);
                   Result := False;
@@ -1050,7 +1075,7 @@ begin
               CrackRegExtraData(CurRec^.ExtraData, RegView, RootKey);
               Subkey := CurRecDataPChar[0];
               LogFmt('Deleting empty registry key: %s\%s', [GetRegRootKeyName(RootKey), Subkey]);
-              ErrorCode := RegDeleteKeyIfEmpty(RegView, RootKey, Subkey);
+              const ErrorCode = RegDeleteKeyIfEmpty(RegView, RootKey, Subkey);
               if ErrorCode = ERROR_DIR_NOT_EMPTY then
                 Log('Deletion skipped (not empty).')
               else if not (ErrorCode in [ERROR_SUCCESS, ERROR_FILE_NOT_FOUND]) then begin
@@ -1065,7 +1090,7 @@ begin
               LogFmt('Deleting registry value: %s\%s\%s', [GetRegRootKeyName(RootKey), Subkey, ValueName]);
               if RegOpenKeyExView(RegView, RootKey, Subkey, 0, KEY_QUERY_VALUE or KEY_SET_VALUE, K) = ERROR_SUCCESS then begin
                 if RegValueExists(K, ValueName) then begin
-                  ErrorCode := RegDeleteValue(K, ValueName);
+                  const ErrorCode = RegDeleteValue(K, ValueName);
                   if ErrorCode <> ERROR_SUCCESS then begin
                     LogFmt('RegDeleteValue failed (%d).', [ErrorCode]);
                     Result := False;
@@ -1134,13 +1159,10 @@ class function TUninstallLog.WriteSafeHeaderString(Dest: PAnsiChar;
 { Copies a string into a PAnsiChar including null terminator, either directly
   if Source only contains ASCII characters, or else UTF-8-encoded with a special
   #1 marker. If MaxDestBytes = 0 it returns the amount of bytes needed. }
-var
-  N: Integer;
-  I: Integer;
 begin
-  N := Length(Source);
+  const N = ULength(Source);
   { Only UTF-8-encode when non-ASCII characters are present }
-  for I := 1 to N do begin
+  for var I := 1 to N do begin
     if Ord(Source[I]) > 126 then begin
       if MaxDestBytes <> 0 then begin
         Dest^ := #1;
@@ -1198,13 +1220,18 @@ var
       S := Size;
       if S > SizeOf(Buffer) - BufCount then
         S := SizeOf(Buffer) - BufCount;
-      Move(P^, Buffer[BufCount], S);
+      UMove(P^, Buffer[BufCount], S);
       Inc(BufCount, S);
       if BufCount = SizeOf(Buffer) then
         Flush;
-      Inc(Cardinal(P), S);
+      Inc(PByte(P), S);
       Dec(Size, S);
     end;
+  end;
+
+  function GetNonStickyFlags: TUninstallLogFlags;
+  begin
+    Result := [ufRedirectionGuard];
   end;
 
 var
@@ -1257,7 +1284,8 @@ begin
       WriteSafeHeaderString(Header.AppName, AppName, SizeOf(Header.AppName));
     if Version > Header.Version then
       Header.Version := Version;
-    TUninstallLogFlags((@Header.Flags)^) := TUninstallLogFlags((@Header.Flags)^) - [ufModernStyle] + Flags;
+    PUninstallLogFlags(@Header.Flags)^ := PUninstallLogFlags(@Header.Flags)^ -
+      GetNonStickyFlags + Flags;
     Header.CRC := GetCRC32(Header, SizeOf(Header)-SizeOf(Longint));
     { Prior to rewriting the header with the new EndOffset value, ensure the
       records we wrote earlier are flushed to disk. This should prevent the
@@ -1290,22 +1318,21 @@ var
 
   procedure FillBuffer;
   var
-    EndOffset, Ofs: Integer64;
     CrcHeader: TUninstallCrcHeader;
   begin
-    EndOffset := To64(Header.EndOffset);
+    var EndOffset: Int64 := Header.EndOffset;
     while BufLeft = 0 do begin
-      Ofs := F.Position;
-      Inc64(Ofs, SizeOf(CrcHeader));
-      if Compare64(Ofs, EndOffset) > 0 then
+      var Ofs := F.Position;
+      Inc(Ofs, SizeOf(CrcHeader));
+      if Ofs > EndOffset then
         Corrupt;
       if F.Read(CrcHeader, SizeOf(CrcHeader)) <> SizeOf(CrcHeader) then
         Corrupt;
       Ofs := F.Position;
-      Inc64(Ofs, CrcHeader.Size);
+      Inc(Ofs, CrcHeader.Size);
       if (CrcHeader.Size <> not CrcHeader.NotSize) or
-         (Cardinal(CrcHeader.Size) > Cardinal(SizeOf(Buffer))) or
-         (Compare64(Ofs, EndOffset) > 0) then
+         (CrcHeader.Size > SizeOf(Buffer)) or
+         (Ofs > EndOffset) then
         Corrupt;
       if F.Read(Buffer, CrcHeader.Size) <> CrcHeader.Size then
         Corrupt;
@@ -1329,10 +1356,10 @@ var
       S := Size;
       if S > BufLeft then
         S := BufLeft;
-      Move(Buffer[BufPos], P^, S);
+      UMove(Buffer[BufPos], P^, S);
       Inc(BufPos, S);
       Dec(BufLeft, S);
-      Inc(Cardinal(P), S);
+      Inc(PByte(P), S);
       Dec(Size, S);
     end;
   end;
@@ -1346,11 +1373,11 @@ begin
   BufLeft := 0;
 
   ReadUninstallLogHeader(F, Filename, Header, InstallMode64Bit);
-  if Header.Version > HighestSupportedVersion then
+  if Header.Version > HighestSupportedHeaderVersion then
     raise Exception.Create(FmtSetupMessage1(msgUninstallUnsupportedVer, Filename));
   AppId := ReadSafeHeaderString(Header.AppId);
   AppName := ReadSafeHeaderString(Header.AppName);
-  Flags := TUninstallLogFlags((@Header.Flags)^);
+  Flags := PUninstallLogFlags(@Header.Flags)^;
 
   for I := 1 to Header.NumRecs do begin
     ReadBuf(FileRec, SizeOf(FileRec));
@@ -1389,13 +1416,19 @@ begin
          (Header.ID <> UninstallLogID[InstallMode64Bit]) or
          (ReadSafeHeaderString(Header.AppId) <> AppId) then
         Exit;
-      ExistingFlags := TUninstallLogFlags((@Header.Flags)^);
+      ExistingFlags := PUninstallLogFlags(@Header.Flags)^;
       Result := True;
     finally
       F.Free;
     end;
   except
   end;
+end;
+
+function TUninstallLog.CanAppend(const Filename: String): Boolean;
+begin
+  var ExistingFlags: TUninstallLogFlags;
+  Result := CanAppend(Filename, ExistingFlags);
 end;
 
 end.

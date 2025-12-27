@@ -2,7 +2,7 @@ unit IDE.OptionsForm;
 
 {
   Inno Setup
-  Copyright (C) 1997-2024 Jordan Russell
+  Copyright (C) 1997-2025 Jordan Russell
   Portions by Martijn Laan
   For conditions of distribution and use, see LICENSE.TXT.
 
@@ -21,7 +21,6 @@ type
     CancelButton: TButton;
     GroupBox1: TGroupBox;
     BackupCheck: TCheckBox;
-    GroupBox2: TGroupBox;
     AssocButton: TButton;
     StartupCheck: TCheckBox;
     WizardCheck: TCheckBox;
@@ -58,6 +57,9 @@ type
     Label5: TNewStaticText;
     MemoKeyMappingComboBox: TComboBox;
     ShowWhiteSpaceCheck: TCheckBox;
+    AutoreloadCheck: TCheckBox;
+    UndoAfterReloadCheck: TCheckBox;
+    AutoHideNewIncludedFilesCheck: TCheckBox;
     procedure AssocButtonClick(Sender: TObject);
     procedure ChangeFontButtonClick(Sender: TObject);
     procedure FormCreate(Sender: TObject);

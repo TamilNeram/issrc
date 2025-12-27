@@ -138,6 +138,7 @@ type
     FWordWrap: Boolean;
     procedure ApplyOptions;
     procedure ForwardMessage(const Message: TMessage);
+    function GetAnchorPosition: Integer;
     function GetAutoCompleteActive: Boolean;
     function GetCallTipActive: Boolean;
     function GetCaretColumn: Integer;
@@ -247,10 +248,11 @@ type
     procedure AssignCmdKey(const KeyCode: TScintKeyCode; const Shift: TShiftState;
       const Command: TScintCommand); overload;
     procedure BeginUndoAction;
-    function Call(Msg: Cardinal; WParam: Longint; LParam: Longint): Longint; overload;
-    function Call(Msg: Cardinal; WParam: Longint; LParam: Longint; out WarnStatus: Integer): Longint; overload;
-    function Call(Msg: Cardinal; WParam: Longint; const LParamStr: TScintRawString): Longint; overload;
-    function Call(Msg: Cardinal; WParam: Longint; const LParamStr: TScintRawString; out WarnStatus: Integer): Longint; overload;
+    procedure BraceMatch;
+    function Call(Msg: Cardinal; WParam: WPARAM; LParam: LPARAM): LRESULT; overload;
+    function Call(Msg: Cardinal; WParam: WPARAM; LParam: LPARAM; out WarnStatus: Integer): LRESULT; overload;
+    function Call(Msg: Cardinal; WParam: WPARAM; const LParamStr: TScintRawString): LRESULT; overload;
+    function Call(Msg: Cardinal; WParam: WPARAM; const LParamStr: TScintRawString; out WarnStatus: Integer): LRESULT; overload;
     procedure CancelAutoComplete;
     procedure CancelAutoCompleteAndCallTip;
     procedure CancelCallTip;
@@ -373,6 +375,7 @@ type
     function WordAtCaretRange: TScintRange;
     procedure ZoomIn;
     procedure ZoomOut;
+    property AnchorPosition: Integer read GetAnchorPosition;
     property AutoCompleteActive: Boolean read GetAutoCompleteActive;
     property CallTipActive: Boolean read GetCallTipActive;
     property CaretColumn: Integer read GetCaretColumn write SetCaretColumn;
@@ -656,14 +659,44 @@ begin
   Call(SCI_BEGINUNDOACTION, 0, 0);
 end;
 
-function TScintEdit.Call(Msg: Cardinal; WParam: Longint; LParam: Longint): Longint;
+procedure TScintEdit.BraceMatch;
+begin
+  var Selections: TScintCaretAndAnchorList := nil;
+  var VirtualSpaces: TScintCaretAndAnchorList := nil;
+  try
+    Selections := TScintCaretAndAnchorList.Create;
+    VirtualSpaces := TScintCaretAndAnchorList.Create;
+    GetSelections(Selections, VirtualSpaces);
+    for var I := 0 to Selections.Count-1 do begin
+      if VirtualSpaces[I].CaretPos = 0 then begin
+        var Pos := Selections[I].CaretPos;
+        var MatchPos := GetPositionOfMatchingBrace(Pos);
+        if MatchPos = -1 then begin
+          Pos := GetPositionBefore(Pos);
+          MatchPos := GetPositionOfMatchingBrace(Pos)
+        end;
+        if MatchPos <> -1 then begin
+          SelectionCaretPosition[I] := MatchPos;
+          SelectionAnchorPosition[I] := MatchPos;
+          if I = 0 then
+            ScrollCaretIntoView;
+        end;
+      end;
+    end;
+  finally
+    VirtualSpaces.Free;
+    Selections.Free;
+  end;
+end;
+
+function TScintEdit.Call(Msg: Cardinal; WParam: WPARAM; LParam: LPARAM): LRESULT;
 begin
   var Dummy: Integer;
   Result := Call(Msg, WParam, LParam, Dummy);
 end;
 
-function TScintEdit.Call(Msg: Cardinal; WParam: Longint; LParam: Longint;
-  out WarnStatus: Integer): Longint;
+function TScintEdit.Call(Msg: Cardinal; WParam: WPARAM; LParam: LPARAM;
+  out WarnStatus: Integer): LRESULT;
 begin
   HandleNeeded;
   if FDirectPtr = nil then
@@ -684,15 +717,15 @@ begin
   WarnStatus := ErrorStatus;
 end;
 
-function TScintEdit.Call(Msg: Cardinal; WParam: Longint;
-  const LParamStr: TScintRawString): Longint;
+function TScintEdit.Call(Msg: Cardinal; WParam: WPARAM;
+  const LParamStr: TScintRawString): LRESULT;
 begin
   var Dummy: Integer;
   Result := Call(Msg, WParam, LParamStr, Dummy);
 end;
 
-function TScintEdit.Call(Msg: Cardinal; WParam: Longint;
-  const LParamStr: TScintRawString; out WarnStatus: Integer): Longint;
+function TScintEdit.Call(Msg: Cardinal; WParam: WPARAM;
+  const LParamStr: TScintRawString; out WarnStatus: Integer): LRESULT;
 begin
   Result := Call(Msg, WParam, LPARAM(PAnsiChar(LParamStr)), WarnStatus);
 end;
@@ -790,6 +823,10 @@ begin
   SetSavePoint;
   Call(SCI_EMPTYUNDOBUFFER, 0, 0);
 
+  { Clearing change history requires one to disable and re-enable it. But
+    also, from Scintilla docs: "Change history depends on the undo history
+    and can only be enabled when undo history is enabled and empty." This
+    is why the following code is here. }
   if ClearChangeHistory and (FChangeHistory <> schDisabled) then begin
     Call(SCI_SETCHANGEHISTORY, SC_CHANGE_HISTORY_DISABLED, 0);
     var Flags := SC_CHANGE_HISTORY_ENABLED;
@@ -976,6 +1013,11 @@ procedure TScintEdit.ForwardMessage(const Message: TMessage);
 begin
   if HandleAllocated then
     CallWindowProc(DefWndProc, Handle, Message.Msg, Message.WParam, Message.LParam);
+end;
+
+function TScintEdit.GetAnchorPosition: Integer;
+begin
+  Result := Call(SCI_GETANCHOR, 0, 0);
 end;
 
 function TScintEdit.GetAutoCompleteActive: Boolean;
@@ -2617,13 +2659,13 @@ end;
 procedure TScintEditStrings.CheckIndexRange(const Index: Integer);
 begin
   if (Index < 0) or (Index >= GetCount) then
-    Error(@SListIndexError, Index);
+    Error(SListIndexError, Index);
 end;
 
 procedure TScintEditStrings.CheckIndexRangePlusOne(const Index: Integer);
 begin
   if (Index < 0) or (Index > GetCount) then
-    Error(@SListIndexError, Index);
+    Error(SListIndexError, Index);
 end;
 
 procedure TScintEditStrings.Clear;

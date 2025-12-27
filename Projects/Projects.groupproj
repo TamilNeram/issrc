@@ -18,6 +18,9 @@
         <Projects Include="Setup.dproj">
             <Dependencies/>
         </Projects>
+        <Projects Include="SetupCustomStyle.dproj">
+            <Dependencies/>
+        </Projects>
         <Projects Include="SetupLdr.dproj">
             <Dependencies/>
         </Projects>
@@ -80,6 +83,15 @@
     <Target Name="Setup:Make">
         <MSBuild Projects="Setup.dproj" Targets="Make"/>
     </Target>
+    <Target Name="SetupCustomStyle">
+        <MSBuild Projects="SetupCustomStyle.dproj"/>
+    </Target>
+    <Target Name="SetupCustomStyle:Clean">
+        <MSBuild Projects="SetupCustomStyle.dproj" Targets="Clean"/>
+    </Target>
+    <Target Name="SetupCustomStyle:Make">
+        <MSBuild Projects="SetupCustomStyle.dproj" Targets="Make"/>
+    </Target>
     <Target Name="SetupLdr">
         <MSBuild Projects="SetupLdr.dproj"/>
     </Target>
@@ -108,13 +120,181 @@
         <MSBuild Projects="..\ISHelp\ISHelpGen\ISHelpGen.dproj" Targets="Make"/>
     </Target>
     <Target Name="Build">
-        <CallTarget Targets="Compil32;ISCC;ISCmplr;ISPP;Setup;SetupLdr;ISSigTool;ISHelpGen"/>
+        <CallTarget Targets="Compil32;ISCC;ISCmplr;ISPP;Setup;SetupCustomStyle;SetupLdr;ISSigTool;ISHelpGen"/>
     </Target>
     <Target Name="Clean">
-        <CallTarget Targets="Compil32:Clean;ISCC:Clean;ISCmplr:Clean;ISPP:Clean;Setup:Clean;SetupLdr:Clean;ISSigTool:Clean;ISHelpGen:Clean"/>
+        <CallTarget Targets="Compil32:Clean;ISCC:Clean;ISCmplr:Clean;ISPP:Clean;Setup:Clean;SetupCustomStyle:Clean;SetupLdr:Clean;ISSigTool:Clean;ISHelpGen:Clean"/>
     </Target>
     <Target Name="Make">
-        <CallTarget Targets="Compil32:Make;ISCC:Make;ISCmplr:Make;ISPP:Make;Setup:Make;SetupLdr:Make;ISSigTool:Make;ISHelpGen:Make"/>
+        <CallTarget Targets="Compil32:Make;ISCC:Make;ISCmplr:Make;ISPP:Make;Setup:Make;SetupCustomStyle:Make;SetupLdr:Make;ISSigTool:Make;ISHelpGen:Make"/>
     </Target>
     <Import Project="$(BDS)\Bin\CodeGear.Group.Targets" Condition="Exists('$(BDS)\Bin\CodeGear.Group.Targets')"/>
+    <ItemGroup Condition="'$(BuildGroup)'=='Release'">
+        <BuildGroupProject Include="Compil32.dproj">
+            <ProjectGuid>{AA47247E-6E7B-4A22-8740-FB9041C2F93B}</ProjectGuid>
+            <Configurations>Release</Configurations>
+            <Platforms>Win32</Platforms>
+            <Enabled>True</Enabled>
+        </BuildGroupProject>
+        <BuildGroupProject Include="ISCmplr.dproj">
+            <ProjectGuid>{25CA0A66-07DC-4224-9252-EBFFA7D81558}</ProjectGuid>
+            <Configurations>Release</Configurations>
+            <Platforms>Win32</Platforms>
+            <Enabled>True</Enabled>
+        </BuildGroupProject>
+        <BuildGroupProject Include="SetupLdr.dproj">
+            <ProjectGuid>{4259E59E-2263-4FE8-8E6C-BFCBC7A6C66D}</ProjectGuid>
+            <Configurations>Release</Configurations>
+            <Platforms>Win32;Win64</Platforms>
+            <Enabled>True</Enabled>
+        </BuildGroupProject>
+        <BuildGroupProject Include="Setup.dproj">
+            <ProjectGuid>{BB7C6F6A-AC62-46BB-A790-0CF4A74B649E}</ProjectGuid>
+            <Configurations>Release</Configurations>
+            <Platforms>Win32;Win64</Platforms>
+            <Enabled>True</Enabled>
+        </BuildGroupProject>
+        <BuildGroupProject Include="ISSigTool.dproj">
+            <ProjectGuid>{484EE7D9-65D0-44DA-B807-9FC874733A64}</ProjectGuid>
+            <Configurations>Release</Configurations>
+            <Platforms>Win32</Platforms>
+            <Enabled>True</Enabled>
+        </BuildGroupProject>
+        <BuildGroupProject Include="ISPP.dproj">
+            <ProjectGuid>{7BEFDB9E-3F9B-4206-BAC1-B332E573D3F8}</ProjectGuid>
+            <Configurations>Release</Configurations>
+            <Platforms>Win32</Platforms>
+            <Enabled>True</Enabled>
+        </BuildGroupProject>
+        <BuildGroupProject Include="SetupCustomStyle.dproj">
+            <ProjectGuid>{F15ECAFB-E2DE-42BA-A3E6-7F9C0F24F560}</ProjectGuid>
+            <Configurations>Release</Configurations>
+            <Platforms>Win32;Win64</Platforms>
+            <Enabled>True</Enabled>
+        </BuildGroupProject>
+        <BuildGroupProject Include="ISCC.dproj">
+            <ProjectGuid>{CB865E8F-FE9C-46FD-90B0-AB3BDBD1C906}</ProjectGuid>
+            <Configurations>Release</Configurations>
+            <Platforms>Win32</Platforms>
+            <Enabled>True</Enabled>
+        </BuildGroupProject>
+        <BuildGroupProject Include="..\ISHelp\ISHelpGen\ISHelpGen.dproj">
+            <ProjectGuid>{058C4E22-A1B3-4C10-9062-05B58D9E9747}</ProjectGuid>
+            <Configurations>Release</Configurations>
+            <Platforms>Win64</Platforms>
+            <Enabled>True</Enabled>
+        </BuildGroupProject>
+    </ItemGroup>
+    <ItemGroup Condition="'$(BuildGroup)'=='Debug'">
+        <BuildGroupProject Include="Compil32.dproj">
+            <ProjectGuid>{AA47247E-6E7B-4A22-8740-FB9041C2F93B}</ProjectGuid>
+            <Configurations>Debug</Configurations>
+            <Platforms>Win32</Platforms>
+            <Enabled>True</Enabled>
+        </BuildGroupProject>
+        <BuildGroupProject Include="ISCmplr.dproj">
+            <ProjectGuid>{25CA0A66-07DC-4224-9252-EBFFA7D81558}</ProjectGuid>
+            <Configurations>Debug</Configurations>
+            <Platforms>Win32</Platforms>
+            <Enabled>True</Enabled>
+        </BuildGroupProject>
+        <BuildGroupProject Include="SetupLdr.dproj">
+            <ProjectGuid>{4259E59E-2263-4FE8-8E6C-BFCBC7A6C66D}</ProjectGuid>
+            <Configurations>Debug</Configurations>
+            <Platforms>Win32;Win64</Platforms>
+            <Enabled>True</Enabled>
+        </BuildGroupProject>
+        <BuildGroupProject Include="Setup.dproj">
+            <ProjectGuid>{BB7C6F6A-AC62-46BB-A790-0CF4A74B649E}</ProjectGuid>
+            <Configurations>Debug</Configurations>
+            <Platforms>Win32;Win64</Platforms>
+            <Enabled>True</Enabled>
+        </BuildGroupProject>
+        <BuildGroupProject Include="ISSigTool.dproj">
+            <ProjectGuid>{484EE7D9-65D0-44DA-B807-9FC874733A64}</ProjectGuid>
+            <Configurations>Debug</Configurations>
+            <Platforms>Win32</Platforms>
+            <Enabled>True</Enabled>
+        </BuildGroupProject>
+        <BuildGroupProject Include="ISPP.dproj">
+            <ProjectGuid>{7BEFDB9E-3F9B-4206-BAC1-B332E573D3F8}</ProjectGuid>
+            <Configurations>Debug</Configurations>
+            <Platforms>Win32</Platforms>
+            <Enabled>True</Enabled>
+        </BuildGroupProject>
+        <BuildGroupProject Include="SetupCustomStyle.dproj">
+            <ProjectGuid>{F15ECAFB-E2DE-42BA-A3E6-7F9C0F24F560}</ProjectGuid>
+            <Configurations>Debug</Configurations>
+            <Platforms>Win32;Win64</Platforms>
+            <Enabled>True</Enabled>
+        </BuildGroupProject>
+        <BuildGroupProject Include="ISCC.dproj">
+            <ProjectGuid>{CB865E8F-FE9C-46FD-90B0-AB3BDBD1C906}</ProjectGuid>
+            <Configurations>Debug</Configurations>
+            <Platforms>Win32</Platforms>
+            <Enabled>True</Enabled>
+        </BuildGroupProject>
+        <BuildGroupProject Include="..\ISHelp\ISHelpGen\ISHelpGen.dproj">
+            <ProjectGuid>{058C4E22-A1B3-4C10-9062-05B58D9E9747}</ProjectGuid>
+            <Configurations>Debug</Configurations>
+            <Platforms>Win64</Platforms>
+            <Enabled>True</Enabled>
+        </BuildGroupProject>
+    </ItemGroup>
+    <ItemGroup Condition="'$(BuildGroup)'=='Debug 64'">
+        <BuildGroupProject Include="Compil32.dproj">
+            <ProjectGuid>{AA47247E-6E7B-4A22-8740-FB9041C2F93B}</ProjectGuid>
+            <Configurations>Debug</Configurations>
+            <Platforms>Win64</Platforms>
+            <Enabled>True</Enabled>
+        </BuildGroupProject>
+        <BuildGroupProject Include="ISCmplr.dproj">
+            <ProjectGuid>{25CA0A66-07DC-4224-9252-EBFFA7D81558}</ProjectGuid>
+            <Configurations>Debug</Configurations>
+            <Platforms>Win64</Platforms>
+            <Enabled>True</Enabled>
+        </BuildGroupProject>
+        <BuildGroupProject Include="SetupLdr.dproj">
+            <ProjectGuid>{4259E59E-2263-4FE8-8E6C-BFCBC7A6C66D}</ProjectGuid>
+            <Configurations>Debug</Configurations>
+            <Platforms>Win32;Win64</Platforms>
+            <Enabled>True</Enabled>
+        </BuildGroupProject>
+        <BuildGroupProject Include="Setup.dproj">
+            <ProjectGuid>{BB7C6F6A-AC62-46BB-A790-0CF4A74B649E}</ProjectGuid>
+            <Configurations>Debug</Configurations>
+            <Platforms>Win32;Win64</Platforms>
+            <Enabled>True</Enabled>
+        </BuildGroupProject>
+        <BuildGroupProject Include="ISSigTool.dproj">
+            <ProjectGuid>{484EE7D9-65D0-44DA-B807-9FC874733A64}</ProjectGuid>
+            <Configurations>Debug</Configurations>
+            <Platforms>Win64</Platforms>
+            <Enabled>True</Enabled>
+        </BuildGroupProject>
+        <BuildGroupProject Include="ISPP.dproj">
+            <ProjectGuid>{7BEFDB9E-3F9B-4206-BAC1-B332E573D3F8}</ProjectGuid>
+            <Configurations>Debug</Configurations>
+            <Platforms>Win64</Platforms>
+            <Enabled>True</Enabled>
+        </BuildGroupProject>
+        <BuildGroupProject Include="SetupCustomStyle.dproj">
+            <ProjectGuid>{F15ECAFB-E2DE-42BA-A3E6-7F9C0F24F560}</ProjectGuid>
+            <Configurations>Debug</Configurations>
+            <Platforms>Win32;Win64</Platforms>
+            <Enabled>True</Enabled>
+        </BuildGroupProject>
+        <BuildGroupProject Include="ISCC.dproj">
+            <ProjectGuid>{CB865E8F-FE9C-46FD-90B0-AB3BDBD1C906}</ProjectGuid>
+            <Configurations>Debug</Configurations>
+            <Platforms>Win64</Platforms>
+            <Enabled>True</Enabled>
+        </BuildGroupProject>
+        <BuildGroupProject Include="..\ISHelp\ISHelpGen\ISHelpGen.dproj">
+            <ProjectGuid>{058C4E22-A1B3-4C10-9062-05B58D9E9747}</ProjectGuid>
+            <Configurations>Debug</Configurations>
+            <Platforms>Win64</Platforms>
+            <Enabled>True</Enabled>
+        </BuildGroupProject>
+    </ItemGroup>
 </Project>

@@ -7,7 +7,7 @@
 [Setup]
 AppName=My Program
 AppVersion=1.5
-WizardStyle=modern
+WizardStyle=modern dynamic
 DefaultDirName={autopf}\My Program
 DefaultGroupName=My Program
 UninstallDisplayIcon={app}\MyProg.exe
@@ -15,8 +15,8 @@ OutputDir=userdocs:Inno Setup Examples Output
 
 [Files]
 ; Place any prerequisite files here, for example:
-; Source: "MyProg-Prerequisite-setup.exe"; Flags: dontcopy
-; Place any regular files here, so *after* all your prerequisites.
+; Source: "MyProg-Prerequisite-setup.exe"; Flags: dontcopy noencryption
+; Place any regular files here, so *after* all your prerequisite files.
 Source: "MyProg.exe"; DestDir: "{app}"
 Source: "MyProg.chm"; DestDir: "{app}"
 Source: "Readme.txt"; DestDir: "{app}"; Flags: isreadme;

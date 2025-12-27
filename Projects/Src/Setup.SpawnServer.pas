@@ -2,7 +2,7 @@ unit Setup.SpawnServer;
 
 {
   Inno Setup
-  Copyright (C) 1997-2024 Jordan Russell
+  Copyright (C) 1997-2025 Jordan Russell
   Portions by Martijn Laan
   For conditions of distribution and use, see LICENSE.TXT.
 
@@ -20,7 +20,7 @@ type
     FWnd: HWND;
     FSequenceNumber: Word;
     FCallStatus: Word;
-    FResultCode: Integer;
+    FResultCode: DWORD;
     FNotifyRestartRequested: Boolean;
     FNotifyNewLanguage: Integer;
     function HandleExec(const IsShellExec: Boolean; const ADataPtr: Pointer;
@@ -38,7 +38,7 @@ procedure EnterSpawnServerDebugMode;
 function NeedToRespawnSelfElevated(const ARequireAdministrator,
   AEmulateHighestAvailable: Boolean): Boolean;
 procedure RespawnSelfElevated(const AExeFilename, AParams: String;
-  var AExitCode: DWORD);
+  var AExitCode: Integer);
 
 implementation
 
@@ -46,7 +46,8 @@ implementation
 {x$DEFINE SPAWNSERVER_RESPAWN_ALWAYS}
 
 uses
-  Classes, Forms, ShellApi, Shared.Int64Em, PathFunc, Shared.CommonFunc, Setup.InstFunc, Setup.SpawnCommon;
+  Classes, Forms, ShellApi, PathFunc, Shared.CommonFunc,
+  SetupLdrAndSetup.InstFunc, Setup.InstFunc, Setup.SpawnCommon;
 
 type
   TPtrAndSize = record
@@ -72,13 +73,13 @@ begin
   end;
 end;
 
-function ExtractLongint(var Data: TPtrAndSize; var Value: Longint): Boolean;
+function ExtractInteger(var Data: TPtrAndSize; var Value: Integer): Boolean;
 var
   P: Pointer;
 begin
-  Result := ExtractBytes(Data, SizeOf(Longint), P);
+  Result := ExtractBytes(Data, SizeOf(Integer), P);
   if Result then
-    Value := Longint(P^);
+    Value := Integer(P^);
 end;
 
 function ExtractString(var Data: TPtrAndSize; var Value: String): Boolean;
@@ -86,12 +87,12 @@ var
   Len: Longint;
   P: Pointer;
 begin
-  Result := ExtractLongint(Data, Len);
+  Result := ExtractInteger(Data, Len);
   if Result then begin
     if (Len < 0) or (Len > $FFFF) then
       Result := False
     else begin
-      Result := ExtractBytes(Data, Len * SizeOf(Value[1]), P);
+      Result := ExtractBytes(Data, Cardinal(Len) * SizeOf(Value[1]), P);
       if Result then
         SetString(Value, PChar(P), Len);
     end;
@@ -155,79 +156,8 @@ begin
 end;
 {$ENDIF}
 
-function GetFinalFileName(const Filename: String): String;
-{ Calls GetFinalPathNameByHandle to expand any SUBST'ed drives, network drives,
-  and symbolic links in Filename. This is needed for elevation to succeed when
-  Setup is started from a SUBST'ed drive letter. }
-
-  function ConvertToNormalPath(P: PChar): String;
-  begin
-    Result := P;
-    if StrLComp(P, '\\?\', 4) = 0 then begin
-      Inc(P, 4);
-      if (PathStrNextChar(P) = P + 1) and (P[1] = ':') and PathCharIsSlash(P[2]) then
-        Result := P
-      else if StrLIComp(P, 'UNC\', 4) = 0 then begin
-        Inc(P, 4);
-        Result := '\\' + P;
-      end;
-    end;
-  end;
-
-const
-  FILE_SHARE_DELETE = $00000004;
-var
-  GetFinalPathNameByHandleFunc: function(hFile: THandle; lpszFilePath: PWideChar;
-    cchFilePath: DWORD; dwFlags: DWORD): DWORD; stdcall;
-  Attr, FlagsAndAttributes: DWORD;
-  H: THandle;
-  Res: Integer;
-  Buf: array[0..4095] of Char;
-begin
-  GetFinalPathNameByHandleFunc := GetProcAddress(GetModuleHandle(kernel32),
-    'GetFinalPathNameByHandleW');
-  if Assigned(GetFinalPathNameByHandleFunc) then begin
-    Attr := GetFileAttributes(PChar(Filename));
-    if Attr <> INVALID_FILE_ATTRIBUTES then begin
-      { Backup semantics must be requested in order to open a directory }
-      if Attr and FILE_ATTRIBUTE_DIRECTORY <> 0 then
-        FlagsAndAttributes := FILE_FLAG_BACKUP_SEMANTICS
-      else
-        FlagsAndAttributes := 0;
-      { Use zero access mask and liberal sharing mode to ensure success }
-      H := CreateFile(PChar(Filename), 0, FILE_SHARE_READ or FILE_SHARE_WRITE or
-        FILE_SHARE_DELETE, nil, OPEN_EXISTING, FlagsAndAttributes, 0);
-      if H <> INVALID_HANDLE_VALUE then begin
-        Res := GetFinalPathNameByHandleFunc(H, Buf, SizeOf(Buf) div SizeOf(Buf[0]), 0);
-        CloseHandle(H);
-        if (Res > 0) and (Res < (SizeOf(Buf) div SizeOf(Buf[0])) - 16) then begin
-          { ShellExecuteEx fails with error 3 on \\?\UNC\ paths, so try to
-            convert the returned path from \\?\ form }
-          Result := ConvertToNormalPath(Buf);
-          Exit;
-        end;
-      end;
-    end;
-  end;
-  Result := Filename;
-end;
-
-function GetFinalCurrentDir: String;
-var
-  Res: Integer;
-  Buf: array[0..MAX_PATH-1] of Char;
-begin
-  DWORD(Res) := GetCurrentDirectory(SizeOf(Buf) div SizeOf(Buf[0]), Buf);
-  if (Res > 0) and (Res < SizeOf(Buf) div SizeOf(Buf[0])) then
-    Result := GetFinalFileName(Buf)
-  else begin
-    RaiseFunctionFailedError('GetCurrentDirectory');
-    Result := '';
-  end;
-end;
-
 procedure RespawnSelfElevated(const AExeFilename, AParams: String;
-  var AExitCode: DWORD);
+  var AExitCode: Integer);
 { Spawns a new process using the "runas" verb.
   Notes:
   1. Despite the function's name, the spawned process may not actually be
@@ -282,7 +212,7 @@ begin
       still queued if MWFMO saw the process terminate before checking for
       new messages.) }
     ProcessMessagesProc;
-    if not GetExitCodeProcess(Info.hProcess, AExitCode) then
+    if not GetExitCodeProcess(Info.hProcess, DWORD(AExitCode)) then
       Win32ErrorMsg('GetExitCodeProcess');
   finally
     CloseHandle(Info.hProcess);
@@ -298,7 +228,8 @@ var
 begin
   Server := TSpawnServer.Create;
   try
-    Application.Title := Format('Wnd=$%x', [Server.FWnd]);
+    { The UInt32 cast prevents sign extension }
+    Application.Title := Format('Wnd=$%x', [UInt32(Server.FWnd)]);
     while True do begin
       ProcessMessagesProc;
       if (GetFocus = Application.Handle) and (GetKeyState(VK_F11) < 0) then
@@ -333,9 +264,9 @@ function TSpawnServer.HandleExec(const IsShellExec: Boolean;
   const ADataPtr: Pointer; const ADataSize: Cardinal): LRESULT;
 var
   Data: TPtrAndSize;
-  EDisableFsRedir: Longint;
+  EDisableFsRedir: Integer;
   EVerb, EFilename, EParams, EWorkingDir: String;
-  EWait, EShowCmd: Longint;
+  EWait, EShowCmd: Integer;
   ClientCurrentDir, SaveCurrentDir: String;
   ExecResult: Boolean;
 begin
@@ -352,18 +283,18 @@ begin
     if not ExtractString(Data, EVerb) then Exit;
   end
   else begin
-    if not ExtractLongint(Data, EDisableFsRedir) then Exit;
+    if not ExtractInteger(Data, EDisableFsRedir) then Exit;
   end;
   if not ExtractString(Data, EFilename) then Exit;
   if not ExtractString(Data, EParams) then Exit;
   if not ExtractString(Data, EWorkingDir) then Exit;
-  if not ExtractLongint(Data, EWait) then Exit;
-  if not ExtractLongint(Data, EShowCmd) then Exit;
+  if not ExtractInteger(Data, EWait) then Exit;
+  if not ExtractInteger(Data, EShowCmd) then Exit;
   if not ExtractString(Data, ClientCurrentDir) then Exit;
   if Data.Size <> 0 then Exit;
 
   Inc(FSequenceNumber);
-  FResultCode := -1;
+  FResultCode := DWORD(-1);
   FCallStatus := SPAWN_STATUS_RUNNING;
   try
     SaveCurrentDir := GetCurrentDir;
@@ -405,7 +336,8 @@ begin
     WM_COPYDATA:
       begin
         try
-          case TWMCopyData(Message).CopyDataStruct.dwData of
+          const CopyDataMsg = DWORD(TWMCopyData(Message).CopyDataStruct.dwData);
+          case CopyDataMsg of
             CD_SpawnServer_Exec,
             CD_SpawnServer_ShellExec:
               begin
@@ -428,7 +360,8 @@ begin
         Res := SPAWN_MSGRESULT_INVALID_SEQUENCE_NUMBER;
         if Message.LParam = FSequenceNumber then begin
           Res := SPAWN_MSGRESULT_INVALID_QUERY_OPERATION;
-          case Message.WParam of
+          const Operation = Integer(Message.WParam);
+          case Operation of
             SPAWN_QUERY_STATUS:
               Res := SPAWN_MSGRESULT_SUCCESS_BITS or FCallStatus;
             SPAWN_QUERY_RESULTCODE_LO:
@@ -444,7 +377,7 @@ begin
         if Message.WParam = 10000 then
           FNotifyRestartRequested := True
         else if Message.WParam = 10001 then
-          FNotifyNewLanguage := Message.LParam;
+          FNotifyNewLanguage := Integer(Message.LParam);
       end;
   else
     Message.Result := DefWindowProc(FWnd, Message.Msg, Message.WParam,

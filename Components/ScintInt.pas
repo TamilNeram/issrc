@@ -1,7 +1,7 @@
 unit ScintInt;
 
 {
-  Delphi translation of Scintilla.h from Scintilla 5.5.0
+  Delphi translation of Scintilla.h
   created by Jordan Russell and updated by Martijn Laan
 }
 
@@ -1362,7 +1362,7 @@ type
     wParam: WPARAM; lParam: LPARAM; var Status: Integer): LRESULT; cdecl;
 
 const
-  IsscintDLL = 'isscint.dll';
+  IsscintDLL = {$IFDEF WIN64} 'isscint-x64.dll' {$ELSE} 'isscint.dll' {$ENDIF};
 
 var
   IsscintLibrary: HMODULE;

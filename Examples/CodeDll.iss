@@ -7,7 +7,7 @@
 [Setup]
 AppName=My Program
 AppVersion=1.5
-WizardStyle=modern
+WizardStyle=modern dynamic
 DefaultDirName={autopf}\My Program
 DisableProgramGroupPage=yes
 DisableWelcomePage=no
@@ -15,12 +15,13 @@ UninstallDisplayIcon={app}\MyProg.exe
 OutputDir=userdocs:Inno Setup Examples Output
 
 [Files]
+; Install our DLL to {app} so we can access it at uninstall time.
+; Use "Flags: dontcopy noencryption" if you don't need uninstall time access.
+Source: "MyDll.dll"; DestDir: "{app}"
+; Place any regular files here, so *after* all your dontcopy DLL files.
 Source: "MyProg.exe"; DestDir: "{app}"
 Source: "MyProg.chm"; DestDir: "{app}"
 Source: "Readme.txt"; DestDir: "{app}"; Flags: isreadme
-; Install our DLL to {app} so we can access it at uninstall time.
-; Use "Flags: dontcopy" if you don't need uninstall time access.
-Source: "MyDll.dll"; DestDir: "{app}"
 
 [Code]
 const
@@ -76,16 +77,16 @@ end;
 
 // The following shows how to use callbacks.
 
-function SetTimer(hWnd, nIDEvent, uElapse, lpTimerFunc: Longword): Longword;
+function SetTimer(hWnd, nIDEvent: NativeInt; uElapse: Cardinal; lpTimerFunc: NativeInt): NativeInt;
 external 'SetTimer@user32.dll stdcall';
 
-function KillTimer(hWnd, nIDEvent: Longword): Bool;
+function KillTimer(hWnd, nIDEvent: NativeInt): Bool;
 external 'KillTimer@user32.dll stdcall';
 
 var
   TimerID, TimerCount: Integer;
 
-procedure MyTimerProc(Arg1, Arg2, Arg3, Arg4: Longword);
+procedure MyTimerProc(Arg1: NativeInt; Arg2: Cardinal; Arg3: NativeInt; Arg4: Cardinal);
 begin
   if WizardForm <> nil then begin
     Inc(TimerCount);

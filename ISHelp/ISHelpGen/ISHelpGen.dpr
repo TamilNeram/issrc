@@ -15,7 +15,7 @@ uses
   PathFunc in '..\..\Components\PathFunc.pas';
 
 const
-  Version = '1.17';
+  Version = '1.23';
 
   XMLFileVersion = '1';
 
@@ -42,6 +42,7 @@ type
     elFlagList,
     elHeading,
     elI,
+    elImg,
     elIndent,
     elKeyword,
     elLI,
@@ -283,7 +284,7 @@ begin
       [AnchorName, CurrentTopicName]);
   DefinedTopics.Add(S);
 
-  Result := Format('<a name="%s">%s</a>', [EscapeHTML(AnchorName), InnerContents]);
+  Result := Format('<span id="%s">%s</span>', [EscapeHTML(AnchorName), InnerContents]);
 end;
 
 function GenerateTopicLinkHTML(const TopicName, AnchorName, InnerContents: String): String;
@@ -377,6 +378,11 @@ begin
         Result := Result + '<dl>' + ParseFormattedText(Node) + '</dl>';
       elI:
         Result := Result + '<i>' + ParseFormattedText(Node) + '</i>';
+      elImg:
+        begin
+          S := EscapeHTML(Node.Attributes['src']);
+          Result := Result + Format('<img src="images/%s" />', [S]);
+        end;
       elIndent:
         Result := Result + '<div class="indent">' + ParseFormattedText(Node) + '</div>';
       elLI:
@@ -398,7 +404,7 @@ begin
           if Pos('ms-its:', S) = 1 then
             Result := Result + Format('<a href="%s">%s</a>', [S, ParseFormattedText(Node)])
           else
-            Result := Result + Format('<a href="%s" target="_blank" title="%s">%s</a><img src="images/extlink.svg" alt=" [external link]" />',
+            Result := Result + Format('<a href="%s" target="_blank" title="%s">%s</a><img class="extlink" src="images/extlink.png" srcset="images/extlink.svg" alt=" [external link]" />',
               [S, S, ParseFormattedText(Node)]);
         end;
       elHeading:
@@ -689,8 +695,9 @@ var
 
   procedure AddLeaf(const Title, TopicName: String);
   begin
-    SL.Add(Format('<tr><td><img src="images/contentstopic.svg" alt="" /></td>' +
-      '<td><a href="%s" target="bodyframe">%s</a></td></tr>',
+    SL.Add(Format('<li><a href="%s" target="bodyframe">' +
+      '<img src="images/contentstopic.svg" alt="" aria-hidden="true" />' +
+      '<span>%s</span></a></li>',
       [EscapeHTML(GenerateTopicLink(TopicName, '')), EscapeHTML(Title)]));
   end;
 
@@ -698,17 +705,14 @@ var
   var
     I: Integer;
   begin
-    SL.Add('<table>');
     for I := 0 to SetupDirectives.Count-1 do
       AddLeaf(SetupDirectives[I], GenerateSetupDirectiveTopicName(SetupDirectives[I]));
-    SL.Add('</table>');
   end;
 
   procedure HandleNode(const ParentNode: IXMLNode);
   var
     Node: IXMLNode;
   begin
-    SL.Add('<table>');
     Node := ParentNode.FirstChild;
     while Assigned(Node) do begin
       if not IsWhitespace(Node) then begin
@@ -716,15 +720,17 @@ var
           elContentsHeading:
             begin
               Inc(CurHeadingID);
-              SL.Add(Format('<tr id="nodecaption_%d"><td><img id="nodeimg_%d" src="images/contentsheadopen.svg" alt="&gt;&nbsp;" onclick="toggle_node(%d);" /></td>' +
-                '<td><a href="javascript:toggle_node(%d);">%s</a></td></tr>',
-                [CurHeadingID, CurHeadingID, CurHeadingID, CurHeadingID, EscapeHTML(Node.Attributes['title'])]));
-              SL.Add(Format('<tr id="nodecontent_%d"><td></td><td>', [CurHeadingID]));
+              SL.Add(Format('<li>' +
+                '<a href="javascript:toggle_node(%d);" aria-controls="nodecontent_%d" aria-expanded="true">' +
+                '<img src="images/contentsheadopen.svg" alt="'#$25BC' " aria-hidden="true" />' +
+                '<span>%s</span></a>',
+                [CurHeadingID, CurHeadingID, EscapeHTML(Node.Attributes['title'])]));
+              SL.Add(Format('<ul id="nodecontent_%d">', [CurHeadingID]));
               if Node.Attributes['title'] = '[Setup] section directives' then
                 HandleSetupDirectivesNode
               else
                 HandleNode(Node);
-              SL.Add('</td></tr>');
+              SL.Add('</ul></li>');
             end;
           elContentsTopic:
             AddLeaf(Node.Attributes['title'], Node.Attributes['topic']);
@@ -734,7 +740,6 @@ var
       end;
       Node := Node.NextSibling;
     end;
-    SL.Add('</table>');
   end;
 
 var
@@ -744,7 +749,9 @@ begin
   SL := TStringList.Create;
   try
     CurHeadingID := 0;
+    SL.Add('<ul>');
     HandleNode(ContentsNode);
+    SL.Add('</ul>');
 
     TemplateSL := TStringList.Create;
     try
@@ -1001,6 +1008,10 @@ var
   StartTime, EndTime: DWORD;
 begin
   try
+    {$IFDEF DEBUG}
+    ReportMemoryLeaksOnShutdown := True;
+    {$ENDIF}
+
     Writeln('ISHelpGen v' + Version + ' by Jordan Russell & Martijn Laan');
 
     if (ParamCount = 0) or (ParamCount > 2) then begin

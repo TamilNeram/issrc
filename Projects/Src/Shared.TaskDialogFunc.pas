@@ -14,13 +14,22 @@ interface
 uses
   Windows, Shared.CommonFunc.Vcl;
 
-function TaskDialogMsgBox(const Icon, Instruction, Text, Caption: String; const Typ: TMsgBoxType; const Buttons: Cardinal; const ButtonLabels: array of String; const ShieldButton: Integer; const VerificationText: String = ''; const pfVerificationFlagChecked: PBOOL = nil): Integer;
+function TaskDialogMsgBox(const Icon, Instruction, Text, Caption: String; const Typ: TMsgBoxType;
+  const Buttons: Cardinal; const ButtonLabels: array of String; const ShieldButton: Integer;
+  const VerificationText: String = ''; const pfVerificationFlagChecked: PBOOL = nil): Integer;
 
 implementation
 
+{$IF Defined(SETUPPROJ) and Defined(VCLSTYLES)}
+  {$DEFINE USETASKDIALOGFORM}
+{$IFEND}
+
 uses
-  Classes, StrUtils, Math, Forms, Dialogs, SysUtils, Themes,
-  Commctrl, Shared.CommonFunc, {$IFDEF SETUPPROJ} Setup.InstFunc, {$ENDIF} PathFunc;
+  Classes, StrUtils, Math, Forms, Dialogs, SysUtils, Themes, Controls, CommCtrl,
+  PathFunc,
+  {$IFDEF USETASKDIALOGFORM} Setup.TaskDialogForm, {$ENDIF}
+  {$IFDEF SETUPPROJ} Setup.InstFunc, {$ENDIF}
+  Shared.CommonFunc;
 
 var
   TaskDialogIndirectFunc: function(const pTaskConfig: TTaskDialogConfig;
@@ -34,13 +43,14 @@ begin
   Result := S_OK;
 end;
 
-function DoTaskDialog(const hWnd: HWND; const Instruction, Text, Caption, Icon: PWideChar; const CommonButtons: Cardinal; const ButtonLabels: array of String; const ButtonIDs: array of Integer; const ShieldButton: Integer; const RightToLeft: Boolean; const TriggerMessageBoxCallbackFuncFlags: LongInt; var ModalResult: Integer; const VerificationText: PWideChar; const pfVerificationFlagChecked: PBOOL): Boolean;
+function DoTaskDialog(const hWnd: HWND; const Instruction, Text, Caption, Icon: PChar;
+  const CommonButtons: Cardinal; const ButtonLabels: array of String; const ButtonIDs: array of Integer;
+  const ShieldButton: Integer; const RightToLeft: Boolean; const TriggerMessageBoxCallbackFuncFlags: Cardinal;
+  var ModalResult: Integer; const VerificationText: PChar; const pfVerificationFlagChecked: PBOOL): Boolean;
 var
   Config: TTaskDialogConfig;
-  NButtonLabelsAvailable: Integer;
   ButtonItems: TTaskDialogButtons;
   ButtonItem: TTaskDialogButtonItem;
-  I: Integer;
   ActiveWindow: Windows.HWND;
   WindowList: Pointer;
 begin
@@ -66,17 +76,17 @@ begin
     end;
     ButtonItems := nil;
     try
-      NButtonLabelsAvailable := Length(ButtonLabels);
+      const NButtonLabelsAvailable = Length(ButtonLabels);
       if NButtonLabelsAvailable <> 0 then begin
         ButtonItems := TTaskDialogButtons.Create(nil, TTaskDialogButtonItem);
         Config.dwFlags := Config.dwFlags or TDF_USE_COMMAND_LINKS;
-        for I := 0 to NButtonLabelsAvailable-1 do begin
+        for var I := 0 to NButtonLabelsAvailable-1 do begin
           ButtonItem := TTaskDialogButtonItem(ButtonItems.Add);
           ButtonItem.Caption := ButtonLabels[I];
           ButtonItem.ModalResult := ButtonIDs[I];
         end;
         Config.pButtons := ButtonItems.Buttons;
-        Config.cButtons := ButtonItems.Count;
+        Config.cButtons := UINT(ButtonItems.Count);
       end;
       TriggerMessageBoxCallbackFunc(TriggerMessageBoxCallbackFuncFlags, False);
       ActiveWindow := GetActiveWindow;
@@ -109,9 +119,11 @@ begin
   {$ENDIF}
 end;
 
-function TaskDialogMsgBox(const Icon, Instruction, Text, Caption: String; const Typ: TMsgBoxType; const Buttons: Cardinal; const ButtonLabels: array of String; const ShieldButton: Integer; const VerificationText: String = ''; const pfVerificationFlagChecked: PBOOL = nil): Integer;
+function TaskDialogMsgBox(const Icon, Instruction, Text, Caption: String; const Typ: TMsgBoxType;
+  const Buttons: Cardinal; const ButtonLabels: array of String; const ShieldButton: Integer;
+  const VerificationText: String = ''; const pfVerificationFlagChecked: PBOOL = nil): Integer;
 begin
-  Application.Restore; { See comments in AppMessageBox }
+  Application.Restore; { See comments in MsgBox }
 
   { Set icon }
   var IconP: PChar;
@@ -129,7 +141,7 @@ begin
 
   { Set ButtonIDs and TDCommonButtons }
   const NButtonLabelsAvailable = Length(ButtonLabels);
-  var ButtonIDs: array of Integer;
+  var ButtonIDs: TArray<Integer>;
   var TDCommonButtons: Cardinal;
   case Buttons of
     MB_OK, MB_OKCANCEL:
@@ -180,7 +192,7 @@ begin
   end;
 
   { Allow extra label to replace TDCBF_CANCEL_BUTTON by an IDCANCEL button id }
-  if (TDCommonButtons or TDCBF_CANCEL_BUTTON <> 0) and
+  if (TDCommonButtons and TDCBF_CANCEL_BUTTON <> 0) and
      (NButtonLabelsAvailable-1 = Length(ButtonIDs)) then begin
     TDCommonButtons := TDCommonButtons and not TDCBF_CANCEL_BUTTON;
     SetLength(ButtonIDs, NButtonLabelsAvailable);
@@ -192,13 +204,26 @@ begin
     DoInternalError('TaskDialogMsgBox: Invalid ButtonLabels');
 
   { Go }
+  const MessageBoxCaption = GetMessageBoxCaption(PChar(Caption), Typ);
+  const TriggerMessageBoxCallbackFuncFlags = Cardinal(IfThen(Typ in [mbError, mbCriticalError], MB_ICONSTOP, 0));
+
+  {$IFDEF USETASKDIALOGFORM}
+  const LStyle = TStyleManager.ActiveStyle;
+  if not LStyle.IsSystemStyle then begin
+    const SetForeground = True; { See comments in MsgBox }
+
+    { Note: Shared.CommonFunc.Vcl also uses TaskDialogForm }
+    Result := TaskDialogForm(Instruction, Text, MessageBoxCaption, IconP, TDCommonButtons, ButtonLabels, ButtonIDs, 0, ShieldButton,
+      TriggerMessageBoxCallbackFuncFlags, VerificationText, pfVerificationFlagChecked, cfTaskDialog, SetForeground);
+    Exit;
+  end;
+  {$ENDIF}
+
   if not DoTaskDialog(GetOwnerWndForMessageBox, PChar(Instruction), PChar(Text),
-           GetMessageBoxCaption(PChar(Caption), Typ), IconP, TDCommonButtons, ButtonLabels, ButtonIDs, ShieldButton,
-           GetMessageBoxRightToLeft, IfThen(Typ in [mbError, mbCriticalError], MB_ICONSTOP, 0), Result, PChar(VerificationText), pfVerificationFlagChecked) then //note that MB_ICONEXCLAMATION (used by mbError) includes MB_ICONSTOP (used by mbCriticalError)
+           MessageBoxCaption, IconP, TDCommonButtons, ButtonLabels, ButtonIDs, ShieldButton,
+           GetMessageBoxRightToLeft, TriggerMessageBoxCallbackFuncFlags, Result, PChar(VerificationText), pfVerificationFlagChecked) then //note that MB_ICONEXCLAMATION (used by mbError) includes MB_ICONSTOP (used by mbCriticalError)
     Result := 0;
 end;
-
-procedure InitCommonControls; external comctl32 name 'InitCommonControls';
 
 initialization
   InitCommonControls;

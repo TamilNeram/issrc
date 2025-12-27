@@ -1,4 +1,4 @@
-; *** Inno Setup version 6.4.0+ Thai messages ***
+; *** Inno Setup version 6.5.0+ Thai messages ***
 ;
 ; To download user-contributed translations of this file, go to:
 ;   https://jrsoftware.org/files/istrans/
@@ -19,13 +19,11 @@ LanguageCodePage=0
 ; If the language you are translating to requires special font faces or
 ; sizes, uncomment any of the following entries and change them accordingly.
 ;DialogFontName=
-;DialogFontSize=8
-;WelcomeFontName=Verdana
-;WelcomeFontSize=12
-;TitleFontName=Arial
-;TitleFontSize=29
-;CopyrightFontName=Arial
-;CopyrightFontSize=8
+;DialogFontSize=9
+;DialogFontBaseScaleWidth=7
+;DialogFontBaseScaleHeight=15
+;WelcomeFontName=Segoe UI
+;WelcomeFontSize=14
 
 [Messages]
 
@@ -81,7 +79,7 @@ ErrorTooManyFilesInDir=ไม่สามารถสร้างไฟล์ใ
 
 ; *** Setup common messages
 ExitSetupTitle=ออกจากตัวติดตั้ง
-ExitSetupMessage=Setup is not complete. If you exit now, the program will not be installed.%n%nYou may run Setup again at another time to complete the installation.%n%nExit Setup?
+ExitSetupMessage=การติดตั้งยังไม่เสร็จสมบูรณ์ หากคุณออกตอนนี้ โปรแกรมจะไม่ถูกติดตั้ง%n%nคุณสามารถเรียกใช้ตัวติดตั้งอีกครั้งในภายหลังได้เพื่อทำการติดตั้งให้เสร็จสมบูรณ์%n%nออกจากตัวติดตั้งหรือไม่
 AboutSetupMenuItem=&เกี่ยวกับตัวติดตั้ง...
 AboutSetupTitle=เกี่ยวกับตัวติดตั้ง
 AboutSetupMessage=%1 เวอร์ชั่น %2%n%3%n%n%1 หน้าหลัก:%n%4
@@ -213,23 +211,26 @@ ReadyMemoGroup=โฟลเดอร์สตาร์ทเมนู:
 ReadyMemoTasks=งานเพิ่มเติม:
 
 ; *** TDownloadWizardPage wizard page and DownloadTemporaryFile
-DownloadingLabel=กำลังดาวน์โหลดไฟล์เพิ่มเติม...
+DownloadingLabel2=กำลังดาวน์โหลดไฟล์...
 ButtonStopDownload=&หยุดดาวน์โหลด
 StopDownload=คุณแน่ใจหรือไม่ที่จะหยุดการดาวน์โหลด
 ErrorDownloadAborted=การดาวน์โหลดถูกยกเลิก
 ErrorDownloadFailed=การดาวน์โหลดล้มเหลว: %1 %2
 ErrorDownloadSizeFailed=การรับขนาดไฟล์ล้มเหลว: %1 %2
-ErrorFileHash1=การตรวจสอบแฮชไฟล์ล้มเหลว: %1
-ErrorFileHash2=แฮชไฟล์ไม่ถูกต้อง: ควรจะเป็น %1 พบ %2
 ErrorProgress=ความคืบหน้าไม่ถูกต้อง: %1 จาก %2
 ErrorFileSize=ขนาดไฟล์ไม่ถูกต้อง: ควรจะเป็น %1 พบ %2
 
-; *** TExtractionWizardPage wizard page and Extract7ZipArchive
-ExtractionLabel=กำลังแตกไฟล์เพิ่มเติม...
+; *** TExtractionWizardPage wizard page and ExtractArchive
+ExtractingLabel=กำลังแตกไฟล์...
 ButtonStopExtraction=&หยุดการแตกไฟล์
 StopExtraction=คุณแน่ใจหรือไม่ที่จะหยุดการแตกไฟล์
 ErrorExtractionAborted=หยุดการแตกไฟล์แล้ว
 ErrorExtractionFailed=การแตกไฟล์ล้มเหลว: %1
+
+; *** Archive extraction failure details
+ArchiveIncorrectPassword=รหัสผ่านไม่ถูกต้อง
+ArchiveIsCorrupted=ไฟล์เก็บถาวรเสียหาย
+ArchiveUnsupportedFormat=รูปแบบของไฟล์เก็บถาวรไม่ถูกต้อง
 
 ; *** "Preparing to Install" wizard page
 WizardPreparing=เตรียมการติดตั้ง
@@ -275,11 +276,15 @@ AbortRetryIgnoreSelectAction=เลือกการดำเนินการ
 AbortRetryIgnoreRetry=&ลองอีกครั้ง
 AbortRetryIgnoreIgnore=&ไม่สนใจข้อผิดพลาดและดำเนินการต่อ
 AbortRetryIgnoreCancel=ยกเลิกการติดตั้ง
+RetryCancelSelectAction=เลือกการกระทำ
+RetryCancelRetry=&ลองอีกครั้ง
+RetryCancelCancel=ยกเลิก
 
 ; *** Installation status messages
 StatusClosingApplications=กำลังปิดแอพลิเคชั่น...
 StatusCreateDirs=กำลังสร้างโฟลเดอร์...
 StatusExtractFiles=กำลังแตกไฟล์...
+StatusDownloadFiles=กำลังดาวน์โหลดไฟล์...
 StatusCreateIcons=กำลังสร้างทางลัด...
 StatusCreateIniEntries=กำลังสร้างรายการ INI...
 StatusCreateRegistryEntries=กำลังสร้างรายการรีจิสทรี...
@@ -309,6 +314,14 @@ FileAbortRetryIgnoreSkipNotRecommended=&ข้ามไฟล์นี้ (ไ�
 FileAbortRetryIgnoreIgnoreNotRecommended=&ไม่สนใจข้อผิดพลาดและดำเนินการต่อ (ไม่แนะนำ)
 SourceIsCorrupted=ไฟล์ต้นฉบับเสียหาย
 SourceDoesntExist=ไม่มีไฟล์ต้นฉบับ "%1"
+SourceVerificationFailed=การยืนยันไฟล์ต้นฉบับล้มเหลว: %1
+VerificationSignatureDoesntExist=ไฟล์ลายเซ็น "%1" ไม่มีอยู่
+VerificationSignatureInvalid=ไฟล์ลายเซ็น "%1" ไม่ถูกต้อง
+VerificationKeyNotFound=ไฟล์ลายเซ็น "%1" ใช้คีย์ที่ไม่รู้จัก
+VerificationFileNameIncorrect=ชื่อไฟล์ไม่ถูกต้อง
+VerificationFileTagIncorrect=แท็กของไฟล์ไม่ถูกต้อง
+VerificationFileSizeIncorrect=ขนาดของไฟล์ไม่ถูกต้อง
+VerificationFileHashIncorrect=แฮชของไฟล์ไม่ถูกต้อง
 ExistingFileReadOnly2=ไฟล์ที่มีอยู่ไม่สามารถถูกแทนที่ได้เนื่องจากถูกทำเครื่องหมายว่าเป็นไฟล์อ่านอย่างเดียว
 ExistingFileReadOnlyRetry=&ลบเครื่องหมายอ่านอย่างเดียวและลองใหม่
 ExistingFileReadOnlyKeepExisting=&เก็บไฟล์ที่มีอยู่ไว้
@@ -327,6 +340,8 @@ ErrorChangingAttr=เกิดข้อผิดพลาดในการเ�
 ErrorCreatingTemp=เกิดข้อผิดพลาดในระหว่างการสร้างไฟล์ในโฟลเดอร์ที่หมาย:
 ErrorReadingSource=เกิดข้อผิดพลาดในระหว่างการอ่านไฟล์ต้นฉบับ:
 ErrorCopying=เกิดข้อผิดพลาดในระหว่างการคัดลอกไฟล์:
+ErrorDownloading=เกิดข้อผิดพลาดในระหว่างการดาวน์โหลดไฟล์:
+ErrorExtracting=เกิดข้อผิดพลาดในระหว่างการแตกไฟล์:
 ErrorReplacingExistingFile=เกิดข้อผิดพลาดในระหว่างการแทนที่ไฟล์ที่มีอยู่:
 ErrorRestartReplace=RestartReplace ล้มเหลว:
 ErrorRenamingTemp=เกิดข้อผิดพลาดในระหว่างการเปลี่ยนชื่อไฟล์ในโฟลเดอร์ที่หมาย:

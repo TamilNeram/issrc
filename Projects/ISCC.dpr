@@ -30,11 +30,12 @@ uses
   Shared.FileClass in 'Src\Shared.FileClass.pas',
   Shared.ConfigIniFile in 'Src\Shared.ConfigIniFile.pas',
   Shared.SignToolsFunc in 'Src\Shared.SignToolsFunc.pas',
-  Shared.Int64Em in 'Src\Shared.Int64Em.pas',
+  Shared.LicenseFunc in 'Src\Shared.LicenseFunc.pas',
   SHA256 in '..\Components\SHA256.pas',
   ECDSA in '..\Components\ECDSA.pas',
   ISSigFunc in '..\Components\ISSigFunc.pas',
-  StringScanner in '..\Components\StringScanner.pas';
+  StringScanner in '..\Components\StringScanner.pas',
+  UnsignedFunc in '..\Components\UnsignedFunc.pas';
 
 {$SETPEOSVERSION 6.1}
 {$SETPESUBSYSVERSION 6.1}
@@ -52,15 +53,14 @@ type
 
   TOptionID = 0..25;
 
-  TOptions = packed set of TOptionID;
+  TOptions = set of TOptionID;
 
-  TIsppOptions = packed record
+  TIsppOptions = record
     ParserOptions: TOptions;
     Options: TOptions;
-    VerboseLevel: Byte;
-    InlineStart: string[7];
-    InlineEnd: string[7];
-    SpanSymbol: AnsiChar;
+    VerboseLevel: Integer;
+    InlineStart: String;
+    InlineEnd: String;
   end;
 
 var
@@ -85,11 +85,11 @@ begin
 
   if HandleIsConsole then begin
     var CharsWritten: DWORD;
-    WriteConsole(Handle, @S[1], Length(S), CharsWritten, nil);
+    WriteConsole(Handle, @S[1], ULength(S), CharsWritten, nil);
   end else begin
     var Utf8S := Utf8Encode(S);
     var BytesWritten: DWORD;
-    WriteFile(Handle, Utf8S[1], Length(Utf8S), BytesWritten, nil);
+    WriteFile(Handle, Utf8S[1], ULength(Utf8S), BytesWritten, nil);
   end;
 end;
 
@@ -144,8 +144,8 @@ begin
   if P.Y < 0 then Exit;
   if P.X > CSBI.dwSize.X then Exit;
   if P.Y > CSBI.dwSize.Y then Exit;
-  Coords.X := P.X;
-  Coords.Y := P.Y;
+  Coords.X := SHORT(P.X);
+  Coords.Y := SHORT(P.Y);
   SetConsoleCursorPosition(StdOutHandle, Coords);
 end;
 
@@ -216,7 +216,7 @@ begin
 end;
 
 function CompilerCallbackProc(Code: Integer; var Data: TCompilerCallbackData;
-  AppData: Longint): Integer; stdcall;
+  AppData: NativeInt): Integer; stdcall;
 
   procedure PrintProgress(Progress: String);
   var
@@ -328,7 +328,7 @@ procedure ProcessCommandLine;
     end;
 
     Definitions := 'ISCC_INVOKED'#1'ISPPCC_INVOKED'#1;
-    IncludePath := ExtractFileDir(NewParamStr(0));
+    IncludePath := PathExtractDir(NewParamStr(0));
     IncludeFiles := '';
   end;
 
@@ -468,10 +468,10 @@ begin
         IncludeFiles := IncludeFiles + S + #1;
       end
       else if IsppMode and GetParam(S, '{#') then begin
-        if S <> '' then IsppOptions.InlineStart := AnsiString(S);
+        if S <> '' then IsppOptions.InlineStart := S;
       end
       else if IsppMode and GetParam(S, '}') then begin
-        if S <> '' then IsppOptions.InlineEnd := AnsiString(S);
+        if S <> '' then IsppOptions.InlineEnd := S;
       end
       else if IsppMode and GetParam(S, 'V') then begin
         if S <> '' then IsppOptions.VerboseLevel := StrToIntDef(S, 0);
@@ -534,8 +534,8 @@ procedure Go;
       AppendOption(S, 'ISPP:ParserOptions', ConvertOptionsToString(ParserOptions));
       AppendOption(S, 'ISPP:Options', ConvertOptionsToString(Options));
       AppendOption(S, 'ISPP:VerboseLevel', IntToStr(VerboseLevel));
-      AppendOption(S, 'ISPP:InlineStart', String(InlineStart));
-      AppendOption(S, 'ISPP:InlineEnd', String(InlineEnd));
+      AppendOption(S, 'ISPP:InlineStart', InlineStart);
+      AppendOption(S, 'ISPP:InlineEnd', InlineEnd);
     end;
 
     AppendOption(S, 'ISPP:Definitions', Definitions);
@@ -545,7 +545,7 @@ procedure Go;
 
 var
   ScriptPath: String;
-  ExitCode: Integer;
+  ExitCode: Word;
   Ver: PCompilerVersionInfo;
   F: TTextFileReader;
   Params: TCompileScriptParamsEx;
@@ -598,6 +598,10 @@ begin
 
     if not Quiet then begin
       WriteStdOut('Compiler engine version: ' + String(Ver.Title) + ' ' + String(Ver.Version));
+      if IsLicensed then
+        WriteStdOut('Licensee name: ' + GetLicenseeDescription)
+      else
+        WriteStdOut(GetLicenseeDescription);
       WriteStdOut('');
     end;
 
@@ -663,6 +667,10 @@ begin
 end;
 
 begin
+  {$IFDEF DEBUG}
+  ReportMemoryLeaksOnShutdown := True;
+  {$ENDIF}
+
   SignTools := TStringList.Create;
   try
     StdOutHandle := GetStdHandle(STD_OUTPUT_HANDLE);
@@ -672,6 +680,7 @@ begin
     StdErrHandleIsConsole := GetConsoleMode(StdErrHandle, Mode);
     SetConsoleCtrlHandler(@ConsoleCtrlHandler, True);
     try
+      ReadLicense;
       IsppMode := ISPPInstalled;
       ProcessCommandLine;
       Go;

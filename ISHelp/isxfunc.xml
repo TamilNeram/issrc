@@ -126,20 +126,6 @@ end;</pre></example>
 end;</pre></example>
       </function>
       <function>
-        <name>WizardSelectComponents</name>
-        <prototype>procedure WizardSelectComponents(const Components: String);</prototype>
-        <description><p>Selects the specified comma separated list of component names.</p>
-<p>If a component name is prefixed with a "*" character, any child components will be selected as well (except for those that include the <tt>dontinheritcheck</tt> flag). If a component name is prefixed with a "!" character, the component will be deselected.</p>
-<p>This function does not change the state of unspecified components. This function can change the state of specified components that include the <tt>fixed</tt> flag.</p>
-</description>
-        <seealso><p><link topic="isxfunc_WizardSelectedComponents">WizardSelectedComponents</link><br />
-<link topic="isxfunc_WizardIsComponentSelected">WizardIsComponentSelected</link></p></seealso>
-        <example><pre>begin
-  WizardSelectComponents('!helpfiles');
-  // the 'helpfiles' component is deselected
-end;</pre></example>
-      </function>
-      <function>
         <name>WizardSelectedTasks</name>
         <prototype>function WizardSelectedTasks(const Descriptions: Boolean): String;</prototype>
         <description><p>Returns a comma-separated list of names or descriptions of the tasks selected by the user.</p></description>
@@ -155,20 +141,6 @@ end;</pre></example>
         <example><pre>begin
   if WizardIsTaskSelected('desktopicon') then
     // the 'desktopicon' task is selected
-end;</pre></example>
-      </function>
-      <function>
-        <name>WizardSelectTasks</name>
-        <prototype>procedure WizardSelectTasks(const Tasks: String);</prototype>
-        <description><p>Selects the specified comma separated list of task names.</p>
-<p>If a task name is prefixed with a "!" character, the task will be deselected.</p>
-<p>This function does not change the state of unspecified tasks.</p>
-</description>
-        <seealso><p><link topic="isxfunc_WizardSelectedTasks">WizardSelectedTasks</link><br />
-<link topic="isxfunc_WizardIsTaskSelected">WizardIsTaskSelected</link></p></seealso>
-        <example><pre>begin
-  WizardSelectTasks('!desktopicon');
-  // the 'desktopicon' task is deselected
 end;</pre></example>
       </function>
       <function>
@@ -271,6 +243,111 @@ end;</pre></example>
     </subcategory>
   </category>
   <category>
+    <description>Wizard Update</description>
+    <subcategory>
+      <function>
+        <name>WizardSelectComponents</name>
+        <prototype>procedure WizardSelectComponents(const Components: String);</prototype>
+        <description><p>Selects the specified comma separated list of component names.</p>
+<p>If a component name is prefixed with a "*" character, any child components will be selected as well (except for those that include the <tt>dontinheritcheck</tt> flag). If a component name is prefixed with a "!" character, the component will be deselected.</p>
+<p>This function does not change the state of unspecified components. This function can change the state of specified components that include the <tt>fixed</tt> flag.</p>
+</description>
+        <seealso><p><link topic="isxfunc_WizardSelectedComponents">WizardSelectedComponents</link><br />
+<link topic="isxfunc_WizardIsComponentSelected">WizardIsComponentSelected</link></p></seealso>
+        <example><pre>begin
+  WizardSelectComponents('!helpfiles');
+  // the 'helpfiles' component is deselected
+end;</pre></example>
+      </function>
+      <function>
+        <name>WizardSelectTasks</name>
+        <prototype>procedure WizardSelectTasks(const Tasks: String);</prototype>
+        <description><p>Selects the specified comma separated list of task names.</p>
+<p>If a task name is prefixed with a "!" character, the task will be deselected.</p>
+<p>This function does not change the state of unspecified tasks.</p>
+</description>
+        <seealso><p><link topic="isxfunc_WizardSelectedTasks">WizardSelectedTasks</link><br />
+<link topic="isxfunc_WizardIsTaskSelected">WizardIsTaskSelected</link></p></seealso>
+        <example><pre>begin
+  WizardSelectTasks('!desktopicon');
+  // the 'desktopicon' task is deselected
+end;</pre></example>
+      </function>
+      <function>
+        <name>WizardSetBackImage</name>
+        <prototype>procedure WizardSetBackImage(const BackImages: TArrayOfGraphic; const Stretch, Center: Boolean; const Opacity: Byte);</prototype>
+          <description><p>Sets a wizard background image. If multiple images are specified, the best-fitting one will be selected. If no images are specified, any existing background image is cleared and the other function parameters are ignored.</p>
+<p>If <tt>Stretch</tt> is <tt>True</tt>, the image will be stretched or shrunk if the image is larger or smaller than required. If <tt>Stretch</tt> is <tt>False</tt> and <tt>Center</tt> is <tt>True</tt>, the image will be centered in the wizard window if it is smaller than required, and clipped if it is larger than required. Otherwise, the image will be positioned in the upper-left corner in its original size.</p>
+<p>See <link topic="setup_wizardbackimagefile">WizardBackImageFile</link> for information about the recommended image size(s).</p>
+<p></p><p><tt>Opacity</tt> specifies the opacity of the image, from <tt>0</tt> (fully transparent) to <tt>255</tt> (fully opaque, so non-transparent).</p>
+<p>Raises an exception if a custom wizard background is not already active. Custom wizard backgrounds can be activated by using <link topic="setup_wizardbackcolor">WizardBackColor</link>, <link topic="setup_wizardbackcolordynamicdark">WizardBackColorDynamicDark</link>, <link topic="setup_wizardbackimagefile">WizardBackImageFile</link>, or <link topic="setup_wizardbackimagefiledynamicdark">WizardBackImageFileDynamicDark</link>.</p>
+<p>To display a single image for the entire duration of Setup, do not use this function. Instead, set <link topic="setup_wizardbackimagefile">WizardBackImageFile</link> and optionally <link topic="setup_wizardbackimagefiledynamicdark">WizardBackImageFileDynamicDark</link>.</p>
+</description>
+        <example><pre>[Setup]
+WizardStyle=modern dynamic
+WizardBackColor=#f3f3f3
+WizardBackColorDynamicDark=#202020
+
+[Files]
+; Replace the DestDir parameters with the following if you do not need the
+; images available during uninstall:
+; Flags: dontcopy noencryption
+Source: "MyImageNormal.png"; DestDir: "{app}"
+Source: "MyImageLarge.png"; DestDir: "{app}"
+
+[Code]
+; Show an image on the install page only
+&lt;event('CurStepChanged')&gt;
+procedure CurStepChanged_UpdateBackImage(CurStep: TSetupStep);
+var
+  PngImages: TArrayOfGraphic; 
+begin
+  if CurStep = ssInstall then begin
+    SetLength(PngImages, 2);
+    PngImages[0] := TPngImage.Create;
+    PngImages[1] := TPngImage.Create;
+    try
+      ExtractTemporaryFile('MyImageNormal.png');
+      PngImages[0].LoadFromFile(ExpandConstant('{tmp}\MyImageNormal.png'));
+      ExtractTemporaryFile('MyImageLarge.png');
+      PngImages[1].LoadFromFile(ExpandConstant('{tmp}\MyImageLarge.png'));
+      WizardSetBackImage(PngImages, True, True, 150);
+    finally
+      PngImages[1].Free;
+      PngImages[0].Free;
+    end;
+  end else if CurStep = ssPostInstall then
+    WizardSetBackImage([], True, True, 150);
+end;
+
+; Show an image during uninstall
+&lt;event('InitializeUninstallProgressForm')&gt;
+procedure InitializeUninstallProgressForm_UpdateBackImage;
+var
+  PngImages: TArrayOfGraphic;
+begin
+  try
+    SetLength(PngImages, 2);
+    PngImages[0] := TPngImage.Create;
+    PngImages[1] := TPngImage.Create;
+    try
+      PngImages[0].LoadFromFile(ExpandConstant('{app}\MyImageNormal.png'));
+      PngImages[1].LoadFromFile(ExpandConstant('{app}\MyImageLarge.png'));
+      WizardSetBackImage(PngImages, True, False, 150);
+    finally
+      PngImages[1].Free;
+      PngImages[0].Free;
+    end;
+  except
+    LogFmt('Could not enable background image: %s', [GetExceptionMessage]);
+  end;
+end; 
+
+; See CodeClasses.iss for another example.</pre></example>
+      </function>
+    </subcategory>
+  </category>
+  <category>
     <description>Exception</description>
     <subcategory>
       <function>
@@ -352,6 +429,32 @@ end;</pre></example>
         <prototype>function IsAdminInstallMode: Boolean;</prototype>
         <description><p>Returns True if Setup is running in <link topic="admininstallmode">administrative install mode</link> or if Uninstall is running with administrative privileges.</p></description>
       </function>
+    </subcategory>
+    <subcategory>
+      <function>
+        <name>IsWinDark</name>
+        <prototype>function IsWinDark: Boolean;</prototype>
+        <description><p>Returns True if the system is running in dark mode.</p></description>
+        <remarks><p>The system's light or dark mode setting is checked only once, at startup.</p></remarks>
+        <seealso><p><link topic="isxfunc_IsDarkInstallMode">IsDarkInstallMode</link></p></seealso>
+      </function>
+      <function>
+        <name>IsDarkInstallMode</name>
+        <prototype>function IsDarkInstallMode: Boolean;</prototype>
+        <description><p>Returns True if Setup or Uninstall runs with a <link topic="setup_wizardstyle">dark style</link>.</p></description>
+        <remarks><p>Can return True even if <link topic="isxfunc_IsWinDark">IsWinDark</link> returns False.</p>
+<p>Cannot return True if <link topic="isxfunc_HighContrastActive">HighContrastActive</link> returns True.</p></remarks>
+        <seealso><p><link topic="isxfunc_IsWinDark">IsWinDark</link><br/>
+<link topic="isxfunc_HighContrastActive">HighContrastActive</link></p></seealso>
+      </function>
+      <function>
+        <name>HighContrastActive</name>
+        <prototype>function HighContrastActive: Boolean;</prototype>
+        <description><p>Returns True if the user's system is set to a high-contrast theme.</p></description>
+        <seealso><p><link topic="isxfunc_IsDarkInstallMode">IsDarkInstallMode</link></p></seealso>
+      </function>
+    </subcategory>
+    <subcategory>
       <function>
         <name>GetWindowsVersion</name>
         <prototype>function GetWindowsVersion: Cardinal;</prototype>
@@ -642,37 +745,37 @@ end;</pre></example>
       </function>
       <function>
         <name>SendMessage</name>
-        <prototype>function SendMessage(const Wnd: HWND; const Msg, WParam, LParam: LongInt): LongInt;</prototype>
+        <prototype>function SendMessage(const Wnd: HWND; const Msg: Cardinal; const WParam: NativeUInt; const LParam: NativeInt): LRESULT;</prototype>
         <description><p>Sends the specified message to the specified window. Does not return until the window procedure has processed the message.</p></description>
       </function>
       <function>
         <name>PostMessage</name>
-        <prototype>function PostMessage(const Wnd: HWND; const Msg, WParam, LParam: LongInt): Boolean;</prototype>
+        <prototype>function PostMessage(const Wnd: HWND; const Msg: Cardinal; const WParam: NativeUInt; const LParam: NativeInt): Boolean;</prototype>
         <description><p>Posts the specified message to the specified window, returning immediately. Returns True if successful.</p></description>
       </function>
       <function>
         <name>SendNotifyMessage</name>
-        <prototype>function SendNotifyMessage(const Wnd: HWND; const Msg, WParam, LParam: LongInt): Boolean;</prototype>
+        <prototype>function SendNotifyMessage(const Wnd: HWND; const Msg: Cardinal; const WParam: NativeUInt; const LParam: NativeInt): Boolean;</prototype>
         <description><p>Sends the specified message to the specified window without waiting for the message to be processed by the destination window procedure. Returns True if successful.</p></description>
       </function>
       <function>
         <name>RegisterWindowMessage</name>
-        <prototype>function RegisterWindowMessage(const Name: String): LongInt;</prototype>
+        <prototype>function RegisterWindowMessage(const Name: String): Cardinal;</prototype>
         <description><p>The RegisterWindowMessage function defines a new window message that is guaranteed to be unique throughout the system. The returned message value can be used when calling the SendBroadcastMessage or PostBroadcastMessage function.</p></description>
       </function>
       <function>
         <name>SendBroadcastMessage</name>
-        <prototype>function SendBroadcastMessage(const Msg, WParam, LParam: LongInt): LongInt;</prototype>
+        <prototype>function SendBroadcastMessage(const Msg: Cardinal; const WParam: NativeUInt; const LParam: NativeInt): LRESULT;</prototype>
         <description><p>Sends the specified message to top-level windows in the system. Does not return until all window procedure have processed the message.<br />The specified message must be unique. Use RegisterWindowMessage to get such a message.</p></description>
       </function>
       <function>
         <name>PostBroadcastMessage</name>
-        <prototype>function PostBroadcastMessage(const Msg, WParam, LParam: LongInt): Boolean;</prototype>
+        <prototype>function PostBroadcastMessage(const Msg: Cardinal; const WParam: NativeUInt; const LParam: NativeInt): Boolean;</prototype>
         <description><p>Posts the specified message to top-level windows in the system, returning immediately.<br />The specified message must be unique. Use RegisterWindowMessage to get such a message.</p></description>
       </function>
       <function>
         <name>SendBroadcastNotifyMessage</name>
-        <prototype>function SendBroadcastNotifyMessage(const Msg, WParam, LParam: LongInt): Boolean;</prototype>
+        <prototype>function SendBroadcastNotifyMessage(const Msg: Cardinal; const WParam: NativeUInt; const LParam: NativeInt): Boolean;</prototype>
       </function>
     </subcategory>
     <subcategory>
@@ -788,23 +891,23 @@ begin
         <description><p>Returns the length of the specified string.</p></description>
       </function>
       <function>
-        <name>Lowercase</name>
-        <prototype>function Lowercase(S: AnyString): String;</prototype>
-        <description><p>Returns a copy of the string S, but with all 7-bit ASCII characters between 'A' and 'Z' converted to lowercase. To convert 8-bit international characters, use AnsiLowercase instead.</p></description>
+        <name>LowerCase</name>
+        <prototype>function LowerCase(S: AnyString): String;</prototype>
+        <description><p>Returns a copy of the string S, but with all 7-bit ASCII characters between 'A' and 'Z' converted to lowercase. To convert 8-bit international characters, use AnsiLowerCase instead.</p></description>
       </function>
       <function>
-        <name>Uppercase</name>
-        <prototype>function Uppercase(S: AnyString): String;</prototype>
-        <description><p>Returns a copy of the string S, but with all 7-bit ASCII characters between 'a' and 'z' converted to uppercase. To convert 8-bit international characters, use AnsiUppercase instead.</p></description>
+        <name>UpperCase</name>
+        <prototype>function UpperCase(S: AnyString): String;</prototype>
+        <description><p>Returns a copy of the string S, but with all 7-bit ASCII characters between 'a' and 'z' converted to uppercase. To convert 8-bit international characters, use AnsiUpperCase instead.</p></description>
       </function>
       <function>
-        <name>AnsiLowercase</name>
-        <prototype>function AnsiLowercase(S: AnyString): String;</prototype>
+        <name>AnsiLowerCase</name>
+        <prototype>function AnsiLowerCase(S: AnyString): String;</prototype>
         <description><p>Returns a string that is a copy of the given string converted to lowercase. The conversion uses the current Windows locale. This function supports multi-byte character sets (MBCS).</p></description>
       </function>
       <function>
-        <name>AnsiUppercase</name>
-        <prototype>function AnsiUppercase(S: AnyString): String;</prototype>
+        <name>AnsiUpperCase</name>
+        <prototype>function AnsiUpperCase(S: AnyString): String;</prototype>
         <description><p>Returns a string that is a copy of the given string converted to uppercase. The conversion uses the current Windows locale. This function supports multi-byte character sets (MBCS).</p></description>
       </function>
       <function>
@@ -845,7 +948,14 @@ end;</pre></example>
       <function>
         <name>Pos</name>
         <prototype>function Pos(SubStr, S: AnyString): Integer;</prototype>
-        <description><p>Searches for Substr within S and returns an integer value that is the index of the first character of Substr within S.<br />If Substr is not found, Pos returns zero. The Pos function is case-sensitive.</p></description>
+        <description><p>Searches for SubStr within S and returns the first index of SubStr within S, 1-based. If SubStr is not found, Pos returns zero. The Pos function is case-sensitive.</p></description>
+        <seealso><p><link topic="isxfunc_RPos">RPos</link></p></seealso>
+      </function>
+      <function>
+        <name>RPos</name>
+        <prototype>function RPos(SubStr, S: String): Integer;</prototype>
+        <description><p>Searches for SubStr within S and returns the last index of SubStr within S, 1-based. If SubStr is not found, RPos returns zero. The RPos function is case-sensitive.</p></description>
+        <seealso><p><link topic="isxfunc_Pos">Pos</link></p></seealso>
       </function>
       <function>
         <name>AddQuotes</name>
@@ -899,7 +1009,7 @@ end;</pre></example>
       <function>
         <name>Format</name>
         <prototype>function Format(const Format: String; const Args: array of const): String;</prototype>
-        <description><p>Formats the series of arguments in the open array Args. Formatting is controlled by the format string Format; the results are returned as a string.</p>
+        <description><p>Formats the string Format using the series of arguments in the open array Args. Formatting is controlled by the format string Format; the results are returned as a string.</p>
 <p>An exception will be raised if an invalid format string is specified, too few arguments are passed, or if any arguments are of the wrong type.</p></description>
         <example><pre>var
   S: String;
@@ -987,7 +1097,7 @@ end;
       <function>
         <name>StrToInt</name>
         <prototype>function StrToInt(S: String): LongInt;</prototype>
-        <description><p>The StrToInt function converts the string passed in S into a number.</p></description>
+        <description><p>The StrToInt function converts the string passed in S into a number. Returns -1 if not successful.</p></description>
         <remarks><p>Use of <link topic="isxfunc_StrToIntDef">StrToIntDef</link> instead of StrToInt is recommended.</p></remarks>
       </function>
       <function>
@@ -998,13 +1108,18 @@ end;
       <function>
         <name>StrToInt64</name>
         <prototype>function StrToInt64(S: String): Int64;</prototype>
-        <description><p>The StrToInt64 function converts the string passed in S into a 64-bit number.</p></description>
+        <description><p>The StrToInt64 function converts the string passed in S into a 64-bit number. Raises an exception if not successful.</p></description>
         <remarks><p>Use of <link topic="isxfunc_StrToInt64Def">StrToInt64Def</link> instead of StrToInt64 is recommended.</p></remarks>
       </function>
       <function>
         <name>StrToFloat</name>
         <prototype>function StrToFloat(S: String): Extended;</prototype>
-        <description><p>The StrToFloat function converts the string passed in S into a floating point number. The character used for the decimal point should always be a dot.</p></description>
+        <description><p>The StrToFloat function converts the string passed in S into a floating point number. The character used for the decimal point should always be a dot. Raises an exception if not successful.</p></description>
+      </function>
+      <function>
+        <name>StrToColor</name>
+        <prototype>function StrToColor(S: String): TColor;</prototype>
+        <description><p>The StrToColor function converts the string passed in S, formatted as <tt>'#rrggbb'</tt>, into a color. Raises an exception if not successful.</p></description>
       </function>
       <function>
         <name>IntToStr</name>
@@ -1014,37 +1129,14 @@ end;
       <function>
         <name>FloatToStr</name>
         <prototype>function FloatToStr(E: Extended): String;</prototype>
-        <description><p>The FloatToStr function converts a floating point number into a string.</p><p>The character used for the decimal point will always be a dot.</p></description>
+        <description><p>The FloatToStr function converts a floating point number into a string. The character used for the decimal point will always be a dot.</p></description>
       </function>
     </subcategory>
     <subcategory>
       <function>
         <name>CharLength</name>
         <prototype>function CharLength(const S: String; const Index: Integer): Integer;</prototype>
-        <description><p>Returns the length in bytes (1 or 2) of the character in the specified string at the specified index.</p></description>
-        <remarks><p>In double-byte character sets (Chinese, Japanese, Korean), most non-ASCII characters occupy two bytes. Note that the second byte of a double-byte character -- known as the "trail byte" -- can be in the same range used by ASCII characters (below 128). Thus, when stepping through a string that may contain double-byte characters, such as a path or filename, care must be taken to not mistake trail bytes for single-byte ASCII characters.</p></remarks>
-        <example><pre>function BackslashToSlash(const S: String): String;
-var
-  I: Integer;
-begin
-  Result := S;
-  I := 1;
-  while I &lt;= Length(Result) do
-  begin
-    if Result[I] = '\' then
-      Result[I] := '/';
-    // Go to the next character. But do not simply increment I by 1.
-    // Increment by CharLength() in case Result[I] is a double-byte character.
-    I := I + CharLength(Result, I);
-  end;
-end;
-
-...
-
-begin
-  // Show path of Common Files with backslashes changed to forward slashes
-  MsgBox(BackslashToSlash(ExpandConstant('{cf}')), mbInformation, MB_OK);
-end;</pre></example>
+        <description><p>Returns the length in characters of the character in the specified string at the specified index, which is currently always 1.</p></description>
       </function>
     </subcategory>
     <subcategory>
@@ -1063,6 +1155,44 @@ end;</pre></example>
         <prototype>function RemoveBackslash(const S: String): String;</prototype>
         <description><p>Returns the specified string with any trailing slashes/backslashes removed.</p></description>
         <remarks><p>Use of this function is discouraged; use <link topic="isxfunc_RemoveBackslashUnlessRoot">RemoveBackslashUnlessRoot</link> instead when working with file system paths.</p></remarks>
+      </function>
+      <function>
+        <name>PathCombine</name>
+        <prototype>function PathCombine(const Dir, Filename: String): String;</prototype>
+        <description><p>Combines a directory and file name into a single path. If Filename is empty the result is an empty string. If Filename already starts with a drive letter or slash it is returned unchanged. Otherwise a single backslash is inserted between Dir and Filename when needed.</p></description>
+      </function>
+      <function>
+        <name>PathHasInvalidCharacters</name>
+        <prototype>function PathHasInvalidCharacters(const S: String; const AllowDriveLetterColon: Boolean): Boolean;</prototype>
+        <description><p>Returns True if the specified string contains characters that are never allowed in paths, or characters and path components that are accepted by the system but might present a security problem (such as '..' and sometimes ':'). Set AllowDriveLetterColon to True when the first character may be a drive letter followed by a colon.</p></description>
+      </function>
+      <function>
+        <name>PathIsRooted</name>
+        <prototype>function PathIsRooted(const Filename: String): Boolean;</prototype>
+        <description><p>Returns True if the specified path begins with a drive letter and colon, or a slash.</p></description>
+      </function>
+      <function>
+        <name>PathNormalizeSlashes</name>
+        <prototype>function PathNormalizeSlashes(const S: String): String;</prototype>
+        <description><p>Returns specified string minus any superfluous slashes, and with any forward slashes
+  converted to backslashes. Does not remove a double backslash at the beginning of the string, since that signifies a UNC path.</p></description>
+      </function>
+      <function>
+        <name>PathSame</name>
+        <prototype>function PathSame(const S1, S2: String): Boolean;</prototype>
+        <description><p>Returns True if the specified strings (typically filenames) are equal. Uses a locale-independent "ordinal" comparison, which is important when comparing filenames/paths. Ignores case.</p></description>
+      </function>
+      <function>
+        <name>PathStartsWith</name>
+        <prototype>function PathStartsWith(const S, AStartsWith: String; const IgnoreCase: Boolean): Boolean;</prototype>
+        <description><p>Returns True if S starts with (or is equal to) AStartsWith. Uses a locale-independent "ordinal" comparison, which is important when comparing filenames/paths. Optionally ignores case.</p></description>
+        <seealso><p><link topic="isxfunc_PathEndsWith">PathEndsWith</link></p></seealso>
+      </function>
+      <function>
+        <name>PathEndsWith</name>
+        <prototype>function PathEndsWith(const S, AEndsWith: String; const IgnoreCase: Boolean): Boolean;</prototype>
+        <description><p>Returns True if S ends with (or is equal to) AEndsWith. Uses a locale-independent "ordinal" comparison, which is important when comparing filenames/paths. Optionally ignores case.</p></description>
+        <seealso><p><link topic="isxfunc_PathStartsWith">PathStartsWith</link></p></seealso>
       </function>
       <function>
         <name>AddPeriod</name>
@@ -1276,7 +1406,7 @@ end;
     <subcategory>
       <function>
         <name>SysErrorMessage</name>
-        <prototype>function SysErrorMessage(ErrorCode: Integer): String;</prototype>
+        <prototype>function SysErrorMessage(ErrorCode: Cardinal): String;</prototype>
         <description><p>Returns a localized error message string that corresponds to the given operating system error code.</p></description>
         <remarks><p>Refer to the <a href="http://msdn.microsoft.com/en-us/library/windows/desktop/ms681381.aspx">system error codes on MSDN</a>.</p></remarks>
       </function>
@@ -1598,7 +1728,7 @@ end;</pre></example>
       <function>
         <name>GetTempDir</name>
         <prototype>function GetTempDir: String;</prototype>
-        <description><p>Returns fully qualified path of the temporary directory, with trailing backslash. This does not use the Win32 function GetTempPath, due to platform differences.<br />Gets the temporary file path as follows:<br />1. The path specified by the TMP environment variable.<br />2. The path specified by the TEMP environment variable, if TMP is not defined or if TMP specifies a directory that does not exist.<br />3. The path specified by the USERPROFILE environment variable, if both TMP and TEMP are not defined or specify nonexistent directories.<br />4. The Windows directory, if all the above TMP, TEMP and USERPROFILE are not defined or specify nonexistent directories.</p></description>
+        <description><p>Returns fully qualified path of the temporary directory, with trailing backslash. Uses the Win32 function GetTempPath2 if available, and GetTempPath otherwise.</p></description>
       </function>
       <function>
         <name>GetShellFolderByCSIDL</name>
@@ -1757,7 +1887,7 @@ end;</pre></example>
         <description><p>Extracts the specified file from the [Files] section to a temporary directory. To find the location of the temporary directory, use <tt>ExpandConstant('{tmp}')</tt>.</p>
 <p>The extracted files are automatically deleted when Setup exits.</p>
 <p>An exception will be raised if the file wasn't extracted successfully, if the file wasn't found, or if the file was found but couldn't be processed because of its MinVersion and/or OnlyBelowVersion parameters.</p></description>
-        <remarks><p>Use <tt>Flags: dontcopy</tt> in the [Files] section to tell Setup to skip the file during the normal file copying stage.</p>
+        <remarks><p>Use <tt>Flags: dontcopy noencryption</tt> in the [Files] section to tell Setup to skip the file during the normal file copying stage, and to ensure it can be extracted before the password is known.</p>
 <p>Use <tt>Flags: noencryption</tt> in the [Files] section if encryption is enabled and you call the ExtractTemporaryFile function prior to the user entering the correct password.</p>
 <p>When solid compression is enabled, be sure to list your temporary files at (or near) the top of the [Files] section. In order to extract an arbitrary file in a solid-compressed installation, Setup must first decompress all prior files (to a temporary buffer in memory). This can result in a substantial delay if a number of other files are listed above the specified file in the [Files] section.</p></remarks>
         <seealso><p><link topic="isxfunc_ExtractTemporaryFiles">ExtractTemporaryFiles</link><br />
@@ -1786,11 +1916,11 @@ end;</pre></example>
         <description><p>Extracts the files matching the wildcard specified by Pattern from the [Files] section to a temporary directory. Returns the number of extracted files. To find the location of the temporary directory, use <tt>ExpandConstant('{tmp}')</tt>.</p>
 <p>The extracted files are automatically deleted when Setup exits.</p>
 <p>An exception will be raised if no files were extracted successfully, no files were found, or if files were found but none could be processed because of their MinVersion and/or OnlyBelowVersion parameters.</p></description>
-        <remarks><p>Use <tt>Flags: dontcopy</tt> in the [Files] section to tell Setup to skip the file during the normal file copying stage.</p>
+        <remarks><p>Use <tt>Flags: dontcopy noencryption</tt> in the [Files] section to tell Setup to skip the file during the normal file copying stage, and to ensure it can be extracted before the password is known.</p>
 <p>When solid compression is enabled, be sure to list your temporary files at (or near) the top of the [Files] section. In order to extract an arbitrary file in a solid-compressed installation, Setup must first decompress all prior files (to a temporary buffer in memory). This can result in a substantial delay if a number of other files are listed above the specified file in the [Files] section.</p></remarks>
         <seealso><p><link topic="isxfunc_ExtractTemporaryFile">ExtractTemporaryFile</link></p></seealso>
         <example><pre>[Files]
-Source: "Readme.txt"; Flags: dontcopy
+Source: "Readme.txt"; Flags: dontcopy noencryption
 Source: "MyProg.exe"; DestDir: "{app}"
 Source: "MyProg.chm"; DestDir: "{app}"
 
@@ -1931,6 +2061,7 @@ end;</pre></example>
         <prototype>procedure MapArchiveExtensions(const DestExt, SourceExt: String);</prototype>
         <description><p>Allows files with a specified destination extension, such as .exe, to be treated as if they have a different source extension, such as .7z, for extraction purposes.</p>
 <p>An exception will be raised if there was an error.</p></description>
+        <remarks><p>Calls to this function are ignored if the <link topic="setup_archiveextraction">ArchiveExtraction</link> [Setup] section directive is set to <tt>basic</tt>. In this case files as always extracted as .7z, regardless of the extension.</p></remarks>
         <seealso><p><link topic="isxfunc_ExtractArchive">ExtractArchive</link><br/>
 <link topic="isxfunc_CreateExtractionPage">CreateExtractionPage</link></p></seealso>
         <example><pre>
@@ -2775,10 +2906,26 @@ Page := CreateOutputMsgMemoPage(wpWelcome,
     <subcategory>
       <function>
         <name>CreateCustomForm</name>
-        <prototype>function CreateCustomForm: TSetupForm;</prototype>
+        <prototype>function CreateCustomForm(const ClientWidth, ClientHeight: Integer; const KeepSizeX, KeepSizeY: Boolean): TSetupForm;</prototype>
         <description><p>Creates a form. The form is empty by default; you have to create your own controls afterward and place them on the form (by setting their Parent properties to the <link topic="scriptclasses" anchor="TSetupForm">TSetupForm</link> instance returned by this function).</p></description>
         <remarks><p>You should call this function instead of creating <link topic="scriptclasses" anchor="TForm">TForm</link> or <link topic="scriptclasses" anchor="TSetupForm">TSetupForm</link> instances directly. This function automatically initializes the font and other properties of the created form to be like Setup's other dialogs.</p>
-<p>The <tt>[LangOptions]</tt> section's <tt>DialogFontName</tt> and <tt>DialogFontSize</tt> directives determine the font used by the form and, by default, any child controls created on the form.</p></remarks>
+<p>The <tt>[LangOptions]</tt> section's <tt>DialogFontName</tt> and <tt>DialogFontSize</tt> directives determine the font used by the form and, by default, any child controls created on the form.</p>
+<p>You should use <link topic="isxfunc_ScaleX">ScaleX</link> and <link topic="isxfunc_ScaleY">ScaleY</link> to scale the desired client width and height to appropriate values. A form's client width and height are the form's full width and height minus its borders.</p>
+<p><tt>KeepSizeX</tt> and <tt>KeepSizeY</tt> specify whether the form is allowed to grow horizontally and vertically as the client area is resized, for [Setup] section directive <link topic="setup_wizardsizepercent">WizardSizePercent</link>.</p>
+<p>The signature of the <tt>CreateCustomForm</tt> function has changed as of version 6.6.0. The width and height must now be specified upfront (they are now read-only properties once the form is constructed). Previously, your code might have looked like this:</p>
+<pre>
+  Form := CreateCustomForm;
+  Form.Caption := 'TSetupForm';
+  Form.ClientWidth := ScaleX(256);
+  Form.ClientHeight := ScaleY(128);
+</pre>
+<p>Starting with version 6.6.0, it should be updated as follows:</p>
+<pre>
+  Form := CreateCustomForm(ScaleX(256), ScaleY(128), False, False);
+  Form.Caption := 'TSetupForm';
+</pre>
+<p>The same applies to the <tt>KeepSizeX</tt> and <tt>KeepSizeY</tt> properties, which were writable properties before version 6.6.0, but are now specified as parameters when calling <tt>CreateCustomForm</tt> and are read-only properties afterwards.</p>
+</remarks>
         <example><p>See <i>CodeClasses.iss</i> for an example.</p></example>
         <seealso><p><link topic="scriptclasses" anchor="TForm">TForm</link><br />
 <link topic="scriptclasses" anchor="TSetupForm">TSetupForm</link></p></seealso>
@@ -2800,7 +2947,7 @@ end;</pre></example>
       </function>
       <function>
         <name>PageIndexFromID</name>
-        <prototype>function PageIndexFromID(const ID: Integer): Integer;</prototype>
+        <prototype>function PageIndexFromID(const ID: Integer): NativeInt;</prototype>
         <description><p>Given a page ID, returns an position index. Call this if, for example, you want to check whether a page is positioned before a certain other page.</p></description>
         <example><pre>function ShouldSkipPage(PageID: Integer): Boolean;
 begin
@@ -2810,12 +2957,18 @@ end;</pre></example>
       <function>
         <name>ScaleX</name>
         <prototype>function ScaleX(X: Integer): Integer;</prototype>
-        <description><p>Takes an X coordinate or width and returns it scaled to fit the size of the current dialog font. If the dialog font is 8-point MS Sans Serif and the user is running Windows in 100% DPI (96 dpi), then X is returned unchanged.</p></description>
+        <description><p>Takes an X coordinate or width and returns it scaled to fit the size of the current dialog font. If you use the default font settings with standard DPI (100%), then X is returned unchanged.</p></description>
       </function>
       <function>
         <name>ScaleY</name>
         <prototype>function ScaleY(Y: Integer): Integer;</prototype>
-        <description><p>Takes a Y coordinate or height and returns it scaled to fit the size of the current dialog font. If the dialog font is 8-point MS Sans Serif and the user is running Windows in 100% DPI (96 dpi), then Y is returned unchanged.</p></description>
+        <description><p>Takes a Y coordinate or height and returns it scaled to fit the size of the current dialog font. If you use the default font settings with standard DPI (100%), then Y is returned unchanged.</p></description>
+      </function>
+      <function>
+        <name>InitializeBitmapButtonFromIcon</name>
+        <prototype>function InitializeBitmapButtonFromIcon(const BitmapButton: TBitmapButton; const IconFilename: String; const BkColor: TColor; const AscendingTrySizes: TArrayOfInteger): Boolean;</prototype>
+        <description><p>Initializes the given bitmap button with an icon from the given icon file using the given background color for transparent parts.</p>
+<p>See <link topic="isxfunc_InitializeBitmapImageFromIcon">InitializeBitmapImageFromIcon</link> for more information.</p></description>
       </function>
       <function>
         <name>InitializeBitmapImageFromIcon</name>
@@ -2823,6 +2976,7 @@ end;</pre></example>
         <description><p>Initializes the given bitmap image with an icon from the given icon file using the given background color for transparent parts.</p>
 <p>The bitmap image should be scaled already and the function will load the largest fitting icon which has a size from the given array of sizes. After loading the function will set the size of the bitmap image to the loaded size.</p>
 <p>The array must be sorted already from smallest to highest size.</p>
+<p>If no match is found in the array (for example, because it is empty), the minimum of the bitmap image's width and height will be used as the size.</p>
 <p>Returns True if the icon could be loaded, False otherwise.</p></description>
         <example><pre>procedure InitializeWizard;
 var
@@ -2839,8 +2993,66 @@ begin
     Parent := Page.Surface;
   end;
 
-  InitializeBitmapImageFromIcon(BitmapImage, 'MyProg.ico', Page.SurfaceColor, [32, 48, 64]);
+  InitializeBitmapImageFromIcon(BitmapImage, 'MyProg.ico', clNone, [32, 48, 64]);
 end;</pre></example>
+        <seealso><p><link topic="isxfunc_InitializeBitmapImageFromStockIcon">InitializeBitmapImageFromStockIcon</link></p></seealso>
+      </function>
+      <function>
+        <name>InitializeBitmapButtonFromStockIcon</name>
+        <prototype>function InitializeBitmapButtonFromStockIcon(const BitmapButton: TBitmapButton; const Siid: Integer; const BkColor: TColor; const AscendingTrySizes: TArrayOfInteger): Boolean;</prototype>
+        <description><p>Initializes the given bitmap button with a system-defined stock icon from the given stock icon id (siid) using the given background color for transparent parts.</p>
+<p>See <link topic="isxfunc_InitializeBitmapImageFromStockIcon">InitializeBitmapImageFromStockIcon</link> for more information.</p></description>
+      </function>
+      <function>
+        <name>InitializeBitmapImageFromStockIcon</name>
+        <prototype>function InitializeBitmapImageFromStockIcon(const BitmapImage: TBitmapImage; const Siid: Integer; const BkColor: TColor; const AscendingTrySizes: TArrayOfInteger): Boolean;</prototype>
+        <description><p>Initializes the given bitmap image with a system-defined stock icon from the given stock icon id (siid) using the given background color for transparent parts.</p>
+<p>The bitmap image should be scaled already and the function will load the largest fitting icon which has a size from the given array of sizes. After loading the function will set the size of the bitmap image to the loaded size.</p>
+<p>The array must be sorted already from smallest to highest size.</p>
+<p>If no match is found in the array (for example, because it is empty), the minimum of the bitmap image's width and height will be used as the size.</p>
+<p>Unlike <link topic="isxfunc_InitializeBitmapImageFromIcon">InitializeBitmapImageFromIcon</link>, this function supports arbitrary sizes.</p>
+<p>Returns True if the icon could be loaded, False otherwise.</p></description>
+        <remarks><p>See <a href="https://learn.microsoft.com/en-us/windows/win32/api/shellapi/ne-shellapi-shstockiconid#constants">Microsoft Learn</a> for an overview of all available icons.</p>
+<p>Supported values for <tt>Siid</tt> are:</p>
+<p><tt>SIID_DOCNOASSOC, SIID_DOCASSOC, SIID_APPLICATION, SIID_FOLDER, SIID_FOLDEROPEN,
+SIID_DRIVE525, SIID_DRIVE35, SIID_DRIVEREMOVE, SIID_DRIVEFIXED, SIID_DRIVENET,
+SIID_DRIVENETDISABLED, SIID_DRIVECD, SIID_DRIVERAM, SIID_WORLD, SIID_SERVER,
+SIID_PRINTER, SIID_MYNETWORK, SIID_FIND, SIID_HELP, SIID_SHARE, SIID_LINK,
+SIID_SLOWFILE, SIID_RECYCLER, SIID_RECYCLERFULL, SIID_MEDIACDAUDIO, SIID_LOCK,
+SIID_AUTOLIST, SIID_PRINTERNET, SIID_SERVERSHARE, SIID_PRINTERFAX,
+SIID_PRINTERFAXNET, SIID_PRINTERFILE, SIID_STACK, SIID_MEDIASVCD,
+SIID_STUFFEDFOLDER, SIID_DRIVEUNKNOWN, SIID_DRIVEDVD, SIID_MEDIADVD,
+SIID_MEDIADVDRAM, SIID_MEDIADVDRW, SIID_MEDIADVDR, SIID_MEDIADVDROM,
+SIID_MEDIACDAUDIOPLUS, SIID_MEDIACDRW, SIID_MEDIACDR, SIID_MEDIACDBURN,
+SIID_MEDIABLANKCD, SIID_MEDIACDROM, SIID_AUDIOFILES, SIID_IMAGEFILES,
+SIID_VIDEOFILES, SIID_MIXEDFILES, SIID_FOLDERBACK, SIID_FOLDERFRONT, SIID_SHIELD,
+SIID_WARNING, SIID_INFO, SIID_ERROR, SIID_KEY, SIID_SOFTWARE, SIID_RENAME,
+SIID_DELETE, SIID_MEDIAAUDIODVD, SIID_MEDIAMOVIEDVD, SIID_MEDIAENHANCEDCD,
+SIID_MEDIAENHANCEDDVD, SIID_MEDIAHDDVD, SIID_MEDIABLURAY, SIID_MEDIAVCD,
+SIID_MEDIADVDPLUSR, SIID_MEDIADVDPLUSRW, SIID_DESKTOPPC, SIID_MOBILEPC,
+SIID_USERS, SIID_MEDIASMARTMEDIA, SIID_MEDIACOMPACTFLASH, SIID_DEVICECELLPHONE,
+SIID_DEVICECAMERA, SIID_DEVICEVIDEOCAMERA, SIID_DEVICEAUDIOPLAYER,
+SIID_NETWORKCONNECT, SIID_INTERNET, SIID_ZIPFILE, SIID_SETTINGS, SIID_DRIVEHDDVD,
+SIID_DRIVEBD, SIID_MEDIAHDDVDROM, SIID_MEDIAHDDVDR, SIID_MEDIAHDDVDRAM,
+SIID_MEDIABDROM, SIID_MEDIABDR, SIID_MEDIABDRE, SIID_CLUSTEREDDRIVE</tt></p></remarks>
+        <example><pre>procedure InitializeWizard;
+var
+  Page: TWizardPage;
+  BitmapImage: TBitmapImage;
+begin
+  Page := CreateCustomPage(wpWelcome, 'Test', 'Test');
+
+  BitmapImage := TBitmapImage.Create(Page);
+  
+  with BitmapImage do begin
+    Width := ScaleX(32);
+    Height := ScaleY(32);
+    Parent := Page.Surface;
+  end;
+
+  InitializeBitmapImageFromStockIcon(BitmapImage, SIID_ERROR, clNone, [32, 48, 64]);
+end;</pre></example>
+        <seealso><p><link topic="isxfunc_InitializeBitmapImageFromIcon">InitializeBitmapImageFromIcon</link></p></seealso>
       </function>
     </subcategory>
   </category>
@@ -3054,8 +3266,21 @@ end;</pre></example>
         <prototype>procedure Log(const S: String);</prototype>
         <description><p>Logs the specified string in Setup's or Uninstall's log file and/or in the Compiler IDE's "Debug Output" view.</p></description>
         <remarks><p>Calls to this function are ignored if logging is not enabled (via the <link topic="setupcmdline">/LOG</link> command line parameter or the <link topic="setup_setuplogging">SetupLogging</link> [Setup] section directive or the <link topic="setup_uninstalllogging">UninstallLogging</link> [Setup] section directive or debugging from the Compiler IDE).</p></remarks>
+        <seealso><p><link topic="isxfunc_LogFmt">LogFmt</link></p></seealso>
       </function>
-<function>
+      <function>
+        <name>LogFmt</name>
+        <prototype>procedure LogFmt(const S: String; const Args: array of const);</prototype>
+        <description><p>Formats the string S using the series of arguments in the open array Args, and then logs it.</p></description>
+        <example><pre>function OnDownloadProgress(const Url, FileName: String; const Progress, ProgressMax: Int64): Boolean;
+begin
+  LogFmt('%s->%s: %d/%d', [Url, FileName, Progress, ProgressMax]);
+  Result := True;
+end;</pre></example>
+        <seealso><p><link topic="isxfunc_Log">Log</link><br/>
+<link topic="isxfunc_Format">Format</link></p></seealso>
+      </function>
+      <function>
         <name>ExecAndCaptureOutput</name>
         <prototype>function ExecAndCaptureOutput(const Filename, Params, WorkingDir: String; const ShowCmd: Integer; const Wait: TExecWait; var ResultCode: Integer; var Output: TExecOutput): Boolean;</prototype>
         <description><p>Identical to <link topic="isxfunc_Exec">Exec</link> except:</p>
@@ -3138,7 +3363,7 @@ end;</pre></example>
     <subcategory>
       <function>
         <name>Sleep</name>
-        <prototype>procedure Sleep(const Milliseconds: LongInt);</prototype>
+        <prototype>procedure Sleep(const Milliseconds: Cardinal);</prototype>
         <description><p>Suspends the execution of Setup or Uninstall for a specified interval.</p></description>
       </function>
       <function>
@@ -3151,6 +3376,30 @@ end;</pre></example>
         <prototype>procedure Beep;</prototype>
         <description><p>Beeps.</p></description>
         <example><pre>Beep; //Beeps</pre></example>
+      </function>
+    </subcategory>
+    <subcategory>
+      <function>
+        <name>Round</name>
+        <prototype>function Round(const E: Extended): Int64;</prototype>
+        <description><p>Returns the value of E rounded to the integer number.</p></description>
+        <remarks><p>If E is exactly halfway between two integer numbers, the result is always the even number. This method of rounding is often called "Banker's rounding."</p></remarks>
+      </function>
+      <function>
+        <name>Trunc</name>
+        <prototype>function Trunc(const E: Extended): Int64;</prototype>
+        <description><p>Returns the truncated value of E; that is, E rounded toward zero, as an integer number.</p></description>
+      </function>
+      <function>
+        <name>Int</name>
+        <prototype>function Int(const E: Extended): Extended;</prototype>
+        <description><p>Returns the integer part of E; that is, E rounded toward zero.</p></description>
+      </function>
+      <function>
+        <name>MulDiv</name>
+        <prototype>function MulDiv(const Number, Numerator, Denominator: Integer): Integer;</prototype>
+        <description><p>Multiplies two 32-bit values (Number and Numerator) and then divides the 64-bit result by a third 32-bit value (Denominator). The final result is rounded to the nearest integer.</p></description>
+        <remarks><p>If the result is a positive half integer (ends in .5), it is rounded up. If the result is a negative half integer, it is rounded down.</p></remarks>
       </function>
       <function>
         <name>Set8087CW</name>
@@ -3177,20 +3426,20 @@ end;</pre></example>
     <subcategory>
       <function>
         <name>LoadDLL</name>
-        <prototype>function LoadDLL(const DLLName: String; var ErrorCode: Integer): LongInt;</prototype>
+        <prototype>function LoadDLL(const DLLName: String; var ErrorCode: Integer): HMODULE;</prototype>
         <description><p>Loads the specified DLL. Returns the DLL handle if the DLL was loaded successfully, zero otherwise. If zero is returned then ErrorCode specifies the error that occurred. Use SysErrorMessage(ErrorCode) to get a description of the error.</p></description>
         <remarks><p>This function is deprecated. See the <link topic="scriptdll" window="main">Using DLLs</link> topic.</p>
 <p>Refer to the <a href="http://msdn.microsoft.com/en-us/library/windows/desktop/ms681381.aspx">system error codes on MSDN</a>.</p></remarks>
       </function>
       <function>
         <name>CallDLLProc</name>
-        <prototype>function CallDLLProc(const DLLHandle: LongInt; const ProcName: String; const Param1, Param2: LongInt; var Result: LongInt): Boolean;</prototype>
+        <prototype>function CallDLLProc(const DLLHandle: HMODULE; const ProcName: String; const Param1, Param2: NativeInt; var Result: NativeInt): Boolean;</prototype>
         <description><p>Calls the specified function in a DLL specified using the DLL handle returned by LoadDLL. Returns True is the procedure was called successfully, False otherwise.<br />The function must use the standard calling convention, accept two 4 byte integer parameters and return a 4 byte integer result.</p></description>
         <remarks><p>This function is deprecated. See the <link topic="scriptdll" window="main">Using DLLs</link> topic.</p></remarks>
       </function>
       <function>
         <name>FreeDLL</name>
-        <prototype>function FreeDLL(const DLLHandle: LongInt): Boolean;</prototype>
+        <prototype>function FreeDLL(const DLLHandle: HMODULE): Boolean;</prototype>
         <description><p>Unloads a DLL specified using the DLL handle returned by LoadDLL.</p></description>
         <remarks><p>This function is deprecated. See the <link topic="scriptdll" window="main">Using DLLs</link> topic.</p></remarks>
       </function>

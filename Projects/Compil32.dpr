@@ -2,7 +2,7 @@ program Compil32;
 
 {
   Inno Setup
-  Copyright (C) 1997-2024 Jordan Russell
+  Copyright (C) 1997-2025 Jordan Russell
   Portions by Martijn Laan
   For conditions of distribution and use, see LICENSE.TXT.
 
@@ -33,8 +33,10 @@ uses
   Shared.DebugStruct in 'Src\Shared.DebugStruct.pas',
   BrowseFunc in '..\Components\BrowseFunc.pas',
   IDE.SignToolsForm in 'Src\IDE.SignToolsForm.pas' {SignToolsForm},
-  IDE.InputQueryComboForm in 'Src\IDE.InputQueryComboForm.pas',
-  IDE.InputQueryMemoForm in 'Src\IDE.InputQueryMemoForm.pas',
+  IDE.GotoFileForm in 'Src\IDE.GotoFileForm.pas' {GotoFileForm},
+  IDE.LicenseKeyForm in 'Src\IDE.LicenseKeyForm.pas' {LicenseKeyForm},
+  IDE.InputQueryComboForm in 'Src\IDE.InputQueryComboForm.pas' {InputQueryComboForm},
+  IDE.InputQueryMemoForm in 'Src\IDE.InputQueryMemoForm.pas' {InputQueryMemoForm},
   ScintInt in '..\Components\ScintInt.pas',
   ScintEdit in '..\Components\ScintEdit.pas',
   IDE.ScintStylerInnoSetup in 'Src\IDE.ScintStylerInnoSetup.pas',
@@ -47,6 +49,8 @@ uses
   NewStaticText in '..\Components\NewStaticText.pas',
   BidiUtils in '..\Components\BidiUtils.pas',
   DropListBox in '..\Components\DropListBox.pas',
+  BitmapButton in '..\Components\BitmapButton.pas',
+  BitmapImage in '..\Components\BitmapImage.pas',
   NewCheckListBox in '..\Components\NewCheckListBox.pas',
   NewNotebook in '..\Components\NewNotebook.pas',
   TaskbarProgressFunc in '..\Components\TaskbarProgressFunc.pas',
@@ -57,8 +61,8 @@ uses
   Shared.SetupSectionDirectives in 'Src\Shared.SetupSectionDirectives.pas',
   Shared.ConfigIniFile in 'Src\Shared.ConfigIniFile.pas',
   Shared.SignToolsFunc in 'Src\Shared.SignToolsFunc.pas',
+  Shared.LicenseFunc in 'Src\Shared.LicenseFunc.pas',
   Shared.FileClass in 'Src\Shared.FileClass.pas',
-  Shared.Int64Em in 'Src\Shared.Int64Em.pas',
   Shared.TaskDialogFunc in 'Src\Shared.TaskDialogFunc.pas',
   IDE.RegistryDesignerForm in 'Src\IDE.RegistryDesignerForm.pas' {RegistryDesignerForm},
   IDE.Wizard.WizardFormRegistryHelper in 'Src\IDE.Wizard.WizardFormRegistryHelper.pas',
@@ -73,17 +77,33 @@ uses
   ECDSA in '..\Components\ECDSA.pas',
   ISSigFunc in '..\Components\ISSigFunc.pas',
   StringScanner in '..\Components\StringScanner.pas',
+  Resample in '..\Components\Resample.pas',
+  UnsignedFunc in '..\Components\UnsignedFunc.pas',
   VCL.Styles,
-  VCL.Themes;
+  VCL.Themes,
+  IDE.MainForm.MRUHelper in 'Src\IDE.MainForm.MRUHelper.pas',
+  IDE.MainForm.UAHHelper in 'Src\IDE.MainForm.UAHHelper.pas',
+  IDE.MainForm.NavigationHelper in 'Src\IDE.MainForm.NavigationHelper.pas',
+  IDE.MainForm.FindReplaceHelper in 'Src\IDE.MainForm.FindReplaceHelper.pas',
+  IDE.MainForm.UpdateMenuHelper in 'Src\IDE.MainForm.UpdateMenuHelper.pas',
+  IDE.MainForm.ToolsHelper in 'Src\IDE.MainForm.ToolsHelper.pas',
+  IDE.MainForm.AutoCompleteAndCallTipsHelper in 'Src\IDE.MainForm.AutoCompleteAndCallTipsHelper.pas',
+  IDE.MainForm.ScintHelper in 'Src\IDE.MainForm.ScintHelper.pas',
+  IDE.MainForm.FinalHelper in 'Src\IDE.MainForm.FinalHelper.pas';
 
 {$SETPEOSVERSION 6.1}
 {$SETPESUBSYSVERSION 6.1}
 {$WEAKLINKRTTI ON}
 
+{$R *.res}
+
 {$R Res\Compil32.docicon.res}
-{$R Res\Compil32.manifest.res}
+{$IFNDEF WIN64}
+{$R Res\Compil32-x86.manifest.res}
+{$ELSE}
+{$R Res\Compil32-x64.manifest.res}
+{$ENDIF}
 {$R Res\Compil32.versionandicon.res}
-{$R Res\Compil32.darkstyle.res}
 
 procedure SetAppUserModelID;
 var
@@ -255,10 +275,13 @@ begin
       Title := SCompilerFormCaption;
   end;
 
-  if Assigned(FlushMenuThemes) then begin
-    { We don't need VCL Styles for dark menus. This keeps shDialogs and shTooltips. }
-    TStyleManager.SystemHooks := TStyleManager.SystemHooks - [shMenus];
-  end;
+  { Don't allow VCL Styles to style menus using owner drawing. Instead we get native dark menus
+    using SetPreferredAppMode and FlushMenuThemes in IDE.MainForm. If you get light menus anyway on
+    modern Windows then you should update the version check at the bottom of NewUxTheme. Using
+    VCL Styles anyway, for example on older versions of Windows, is not the correct approach:
+    TSysPopupStyleHook does not support our use of bitmaps set using MIIM_BITMAP on a TMenuItem, nor
+    does it support our fake shortcuts set with SetFakeShortCut. }
+  TStyleManager.SystemHooks := TStyleManager.SystemHooks - [shMenus]; { This keeps shDialogs and shTooltips }
 
   Application.CreateForm(TImagesModule, ImagesModule);
   Application.CreateForm(TMainForm, MainForm);

@@ -2,7 +2,7 @@ unit Setup.SecurityFunc;
 
 {
   Inno Setup
-  Copyright (C) 1997-2024 Jordan Russell
+  Copyright (C) 1997-2025 Jordan Russell
   Portions by Martijn Laan
   For conditions of distribution and use, see LICENSE.TXT.
 
@@ -24,7 +24,7 @@ implementation
 
 uses
   PathFunc, SetupLdrAndSetup.Messages, SetupLdrAndSetup.InstFunc, Setup.LoggingFunc,
-  SetupLdrAndSetup.RedirFunc, Setup.Helper;
+  Setup.RedirFunc, Setup.Helper;
 
 function InternalGrantPermission(const ObjectType: DWORD; const ObjectName: String;
   const Entries: TGrantPermissionEntry; const EntryCount: Integer;
@@ -109,7 +109,7 @@ begin
       PSID(ExplicitAccess[I].Trustee.ptstrName) := Sid;
       Inc(E);
     end;
-    Result := SetEntriesInAclW(EntryCount, ExplicitAccess[0], Dacl, NewDacl);
+    Result := SetEntriesInAclW(ULONG(EntryCount), ExplicitAccess[0], Dacl, NewDacl);
     if Result <> ERROR_SUCCESS then
       Exit;
     try
@@ -195,11 +195,11 @@ var
   ObjName: String;
   ErrorCode: DWORD;
 begin
-  case RootKey of
-    HKEY_CLASSES_ROOT: ObjName := 'CLASSES_ROOT';
-    HKEY_CURRENT_USER: ObjName := 'CURRENT_USER';
-    HKEY_LOCAL_MACHINE: ObjName := 'MACHINE';
-    HKEY_USERS: ObjName := 'USERS';
+  case UInt32(RootKey) of
+    UInt32(HKEY_CLASSES_ROOT): ObjName := 'CLASSES_ROOT';
+    UInt32(HKEY_CURRENT_USER): ObjName := 'CURRENT_USER';
+    UInt32(HKEY_LOCAL_MACHINE): ObjName := 'MACHINE';
+    UInt32(HKEY_USERS): ObjName := 'USERS';
   else
     { Other root keys are not supported by Get/SetNamedSecurityInfo }
     SetLastError(ERROR_INVALID_PARAMETER);

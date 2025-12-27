@@ -7,15 +7,22 @@ unit Setup.ScriptFunc.HelperFunc;
   For conditions of distribution and use, see LICENSE.TXT.
 
   Helper types and functions for the script support functions (run time - used by Setup)
+
+  Requires following globals to be set:
+  -LangOptions.DialogFontName
+  -LangOptions.DialogFontSize
+  -LangOptions.DialogFontBaseScaleWidth
+  -LangOptions.DialogFontBaseScaleHeight
+  -shWizardKeepAspectRatio in SetupHeader.Options
 }
 
 interface
 
 uses
-  Windows, Diagnostics,
+  Windows,
   uPSRuntime, MD5, SHA1,
   Shared.CommonFunc, Shared.FileClass, Setup.MainForm, Setup.WizardForm,
-  Setup.UninstallProgressForm, Setup.Install, Compression.SevenZipDecoder;
+  Setup.UninstallProgressForm;
 
 type
   { Must keep this in synch with Compiler.ScriptFunc.pas }
@@ -24,9 +31,9 @@ type
   { Must keep this in synch with Compiler.ScriptFunc.pas }
   TFindRec = record
     Name: String;
-    Attributes: LongWord;
-    SizeHigh: LongWord;
-    SizeLow: LongWord;
+    Attributes: Cardinal;
+    SizeHigh: Cardinal;
+    SizeLow: Cardinal;
     CreationTime: TFileTime;
     LastAccessTime: TFileTime;
     LastWriteTime: TFileTime;
@@ -46,26 +53,8 @@ type
     SuiteMask: Word;
   end;
 
-  { Makes sure script isn't called crazy often because that would slow the download significantly.
-    Only reports:
-      -At start or finish
-      -If at least 50 ms passed since last report }
-  TProgressThrottler = class
-  private
-    FOnDownloadProgress: TOnDownloadProgress;
-    FOnExtractionProgress: TOnExtractionProgress;
-    FStopWatch: TStopWatch;
-    FLastOkProgress: Int64;
-    function ThrottleOk(const Progress, ProgressMax: Int64): Boolean;
-  public
-    constructor Create(const OnDownloadProgress: TOnDownloadProgress); overload;
-    constructor Create(const OnExtractionProgress: TOnExtractionProgress); overload;
-    procedure Reset;
-    function OnDownloadProgress(const Url, BaseName: string; const Progress, ProgressMax: Int64): Boolean;
-    function OnExtractionProgress(const ArchiveName, FileName: string; const Progress, ProgressMax: Int64): Boolean;
-  end;
-
 var
+  OrigScaleBaseUnitX, OrigScaleBaseUnitY: Integer;
   ScaleBaseUnitX, ScaleBaseUnitY: Integer;
 
 procedure NoUninstallFuncError(const C: AnsiString); overload;
@@ -75,12 +64,13 @@ function GetUninstallProgressForm: TUninstallProgressForm;
 function GetMsgBoxCaption: String;
 procedure InitializeScaleBaseUnits;
 function IsProtectedSrcExe(const Filename: String): Boolean;
+function LogFmtHelper(const S: String; const Args: array of const): String;
+function FmtMessageHelper(const S: String; const Args: array of String): String;
 function FindFirstHelper(const FileName: String; var FindRec: TFindRec): Boolean;
 function FindNextHelper(var FindRec: TFindRec): Boolean;
 procedure FindCloseHelper(var FindRec: TFindRec);
-function FmtMessageHelper(const S: String; const Args: array of String): String;
 procedure GetWindowsVersionExHelper(var Version: TWindowsVersion);
-procedure CrackCodeRootKey(CodeRootKey: HKEY; var RegView: TRegView;
+procedure CrackCodeRootKey(CodeRootKey: UInt32; var RegView: TRegView;
   var RootKey: HKEY);
 function GetSubkeyOrValueNames(const RegView: TRegView; const RootKey: HKEY;
   const SubKeyName: String; const Stack: TPSStack; const ItemNo: Longint; const Subkey: Boolean): Boolean;
@@ -107,15 +97,15 @@ function LoadStringsFromFile(const FileName: String; const Stack: TPSStack;
 function SaveStringToFile(const FileName: String; const S: AnsiString; Append: Boolean): Boolean;
 function SaveStringsToFile(const FileName: String; const Stack: TPSStack;
   const ItemNo: Longint; Append, UTF8, UTF8WithoutBOM: Boolean): Boolean;
-function CreateCallback(const Caller: TPSExec; const P: PPSVariantProcPtr): LongWord;
+function CreateCallback(const Caller: TPSExec; const P: PPSVariantProcPtr): NativeInt;
 
 implementation
 
 uses
   Forms, SysUtils, Graphics,
-  uPSUtils, PathFunc, ASMInline, PSStackHelper,
-  Setup.MainFunc, SetupLdrAndSetup.RedirFunc, Setup.InstFunc,
-  SetupLdrAndSetup.Messages, Shared.SetupMessageIDs,
+  uPSUtils, PathFunc, ASMInline, PSStackHelper, UnsignedFunc,
+  Setup.MainFunc, Setup.RedirFunc, Setup.InstFunc,
+  SetupLdrAndSetup.Messages, Shared.SetupMessageIDs, Shared.Struct,
   Shared.SetupTypes, Shared.SetupSteps, Setup.LoggingFunc, Setup.SetupForm;
 
 procedure NoUninstallFuncError(const C: AnsiString); overload;
@@ -164,9 +154,22 @@ begin
     Exit;
   Font := TFont.Create;
   try
-    SetFontNameSize(Font, LangOptions.DialogFontName, LangOptions.DialogFontSize,
-      '', 8);
+    SetFontNameSize(Font, LangOptions.DialogFontName, LangOptions.DialogFontSize, '', 9);
+
     CalculateBaseUnitsFromFont(Font, ScaleBaseUnitX, ScaleBaseUnitY);
+
+    OrigScaleBaseUnitX := LangOptions.DialogFontBaseScaleWidth;
+    OrigScaleBaseUnitY := LangOptions.DialogFontBaseScaleHeight;
+
+    if shWizardKeepAspectRatio in SetupHeader.Options then begin
+      if ScaleBaseUnitX * OrigScaleBaseUnitY > ScaleBaseUnitY * OrigScaleBaseUnitX then begin
+        ScaleBaseUnitY := ScaleBaseUnitX;
+        OrigScaleBaseUnitY := OrigScaleBaseUnitX;
+      end else begin
+        ScaleBaseUnitX := ScaleBaseUnitY;
+        OrigScaleBaseUnitX := OrigScaleBaseUnitY;
+      end;
+    end;
   finally
     Font.Free;
   end;
@@ -180,6 +183,16 @@ begin
     Result := PathCompare(ExpandedFilename, SetupLdrOriginalFilename) = 0;
   end else
     Result := False;
+end;
+
+function LogFmtHelper(const S: String; const Args: array of const): String;
+begin
+  LogFmt(S, Args);
+end;
+
+function FmtMessageHelper(const S: String; const Args: array of String): String;
+begin
+  Result := FmtMessage(PChar(S), Args);
 end;
 
 procedure FindDataToFindRec(const FindData: TWin32FindData;
@@ -229,11 +242,6 @@ begin
   end;
 end;
 
-function FmtMessageHelper(const S: String; const Args: array of String): String;
-begin
-  Result := FmtMessage(PChar(S), Args);
-end;
-
 procedure GetWindowsVersionExHelper(var Version: TWindowsVersion);
 begin
   Version.Major := WindowsVersion shr 24;
@@ -246,12 +254,12 @@ begin
   Version.SuiteMask := WindowsSuiteMask;
 end;
 
-procedure CrackCodeRootKey(CodeRootKey: HKEY; var RegView: TRegView;
+procedure CrackCodeRootKey(CodeRootKey: UInt32; var RegView: TRegView;
   var RootKey: HKEY);
 begin
   if (CodeRootKey and not CodeRootKeyValidFlags) = HKEY_AUTO then begin
     { Change HKA to HKLM or HKCU, keeping our special flag bits. }
-    CodeRootKey := (CodeRootKey and CodeRootKeyValidFlags) or InstallModeRootKey;
+    CodeRootKey := (CodeRootKey and CodeRootKeyValidFlags) or UInt32(InstallModeRootKey);
   end else begin
     { Allow only predefined key handles (8xxxxxxx). Can't accept handles to
       open keys because they might have our special flag bits set.
@@ -280,7 +288,6 @@ const
 var
   K: HKEY;
   Buf, S: String;
-  BufSize, R: DWORD;
 begin
   Result := False;
   SetString(Buf, nil, 512);
@@ -289,11 +296,12 @@ begin
   try
     var ArrayBuilder := Stack.InitArrayBuilder(ItemNo);
     while True do begin
-      BufSize := Length(Buf);
+      var BufSize := ULength(Buf);
+      var R: Integer;
       if Subkey then
-        R := RegEnumKeyEx(K, ArrayBuilder.I, @Buf[1], BufSize, nil, nil, nil, nil)
+        R := RegEnumKeyEx(K, DWORD(ArrayBuilder.I), @Buf[1], BufSize, nil, nil, nil, nil)
       else
-        R := RegEnumValue(K, ArrayBuilder.I, @Buf[1], BufSize, nil, nil, nil, nil);
+        R := RegEnumValue(K, DWORD(ArrayBuilder.I), @Buf[1], BufSize, nil, nil, nil, nil);
       case R of
         ERROR_SUCCESS: ;
         ERROR_NO_MORE_ITEMS: Break;
@@ -366,22 +374,22 @@ end;
 
 function GetMD5OfAnsiString(const S: AnsiString): TMD5Digest;
 begin
-  Result := MD5Buf(Pointer(S)^, Length(S)*SizeOf(S[1]));
+  Result := MD5Buf(Pointer(S)^, ULength(S)*SizeOf(S[1]));
 end;
 
 function GetMD5OfUnicodeString(const S: UnicodeString): TMD5Digest;
 begin
-  Result := MD5Buf(Pointer(S)^, Length(S)*SizeOf(S[1]));
+  Result := MD5Buf(Pointer(S)^, ULength(S)*SizeOf(S[1]));
 end;
 
 function GetSHA1OfAnsiString(const S: AnsiString): TSHA1Digest;
 begin
-  Result := SHA1Buf(Pointer(S)^, Length(S)*SizeOf(S[1]));
+  Result := SHA1Buf(Pointer(S)^, ULength(S)*SizeOf(S[1]));
 end;
 
 function GetSHA1OfUnicodeString(const S: UnicodeString): TSHA1Digest;
 begin
-  Result := SHA1Buf(Pointer(S)^, Length(S)*SizeOf(S[1]));
+  Result := SHA1Buf(Pointer(S)^, ULength(S)*SizeOf(S[1]));
 end;
 
 procedure ProcessMessagesProc; far;
@@ -532,7 +540,7 @@ function SetCodePreviousData(const PreviousDataKey: HKEY; const ValueName, Value
 begin
   if ValueData <> '' then begin
     { do not localize or change the following string }
-    Result := RegSetValueEx(PreviousDataKey, PChar('Inno Setup CodeFile: ' + ValueName), 0, REG_SZ, PChar(ValueData), (Length(ValueData)+1)*SizeOf(ValueData[1])) = ERROR_SUCCESS
+    Result := RegSetValueEx(PreviousDataKey, PChar('Inno Setup CodeFile: ' + ValueName), 0, REG_SZ, PChar(ValueData), (ULength(ValueData)+1)*SizeOf(ValueData[1])) = ERROR_SUCCESS
   end else
     Result := True;
 end;
@@ -636,23 +644,17 @@ end;
 var
   ASMInliners: array of Pointer;
 
-function CreateCallback(const Caller: TPSExec; const P: PPSVariantProcPtr): LongWord;
-var
-  ProcRec: TPSInternalProcRec;
-  Method: TMethod;
-  Inliner: TASMInline;
-  ParamCount, SwapFirst, SwapLast: Integer;
-  S: tbtstring;
+function CreateCallback(const Caller: TPSExec; const P: PPSVariantProcPtr): NativeInt;
 begin
   { ProcNo 0 means nil was passed by the script }
   if P.ProcNo = 0 then
     InternalError('Invalid Method value');
 
   { Calculate parameter count of our proc, will need this later. }
-  ProcRec := Caller.GetProcNo(P.ProcNo) as TPSInternalProcRec;
-  S := ProcRec.ExportDecl;
+  const ProcRec = Caller.GetProcNo(P.ProcNo) as TPSInternalProcRec;
+  var S := ProcRec.ExportDecl;
   GRFW(S);
-  ParamCount := 0;
+  var ParamCount := 0;
   while S <> '' do begin
     Inc(ParamCount);
     GRFW(S);
@@ -661,7 +663,7 @@ begin
   { Turn our proc into a callable TMethod - its Code will point to
     ROPS' MyAllMethodsHandler and its Data to a record identifying our proc.
     When called, MyAllMethodsHandler will use the record to call our proc. }
-  Method := MkMethod(Caller, P.ProcNo);
+  const Method = MkMethod(Caller, P.ProcNo);
 
   { Wrap our TMethod with a dynamically generated stdcall callback which will
     do two things:
@@ -671,12 +673,13 @@ begin
     Based on InnoCallback by Sherlock Software, see
     http://www.sherlocksoftware.org/page.php?id=54 and
     https://github.com/thenickdude/InnoCallback. }
-  Inliner := TASMInline.create;
+  const Inliner = TASMInline.create;
   try
+{$IFDEF CPUX86}
     Inliner.Pop(EAX); //get the retptr off the stack
 
-    SwapFirst := 2;
-    SwapLast := ParamCount-1;
+    var SwapFirst := 2;
+    var SwapLast := ParamCount-1;
 
     //Reverse the order of parameters from param3 onwards in the stack
     while SwapLast > SwapFirst do begin
@@ -695,79 +698,75 @@ begin
 
     Inliner.Push(EAX); //put the retptr back onto the stack
 
-    Inliner.Mov(EAX, LongWord(Method.Data)); //Load the self ptr
+    Inliner.Mov(EAX, Cardinal(Method.Data)); //Load the self ptr
 
     Inliner.Jmp(Method.Code); //jump to the wrapped proc
+{$ELSE}
+    { RCX, RDX, R8, R9 carry the first 4 params and 32 bytes of shadow space
+      belong to the caller. ROPS' MyAllMethodsHandler expects RCX=Self/Data,
+      RDX/R8/R9=param1..param3 and the rest packed on the stack. }
+
+    { Keep values for later }
+    Inliner.MovRegReg(R11, RCX);
+    Inliner.MovRegReg(R10, RDX);
+    Inliner.MovRegReg(RAX, R8);
+    Inliner.MovRegReg(RDX, R9);
+
+    { Make our own shadow space + spill area to re-stack params for ROPS. }
+    var ExtraParams := ParamCount - 3;
+    if ExtraParams < 0 then
+      ExtraParams := 0;
+    var FrameSize := 32 + ExtraParams * SizeOf(Pointer);
+    if (FrameSize and $F) = 0 then
+      Inc(FrameSize, 8); { keep RSP 16-byte aligned at call site }
+    Inliner.SubRsp(FrameSize);
+
+    if ParamCount >= 4 then
+      Inliner.MovMemRSPReg(32, RDX); { param4: top of shadow space }
+
+    { Copy remaining params (5+) from the caller's stack into our spill
+      area so they follow shadow space, matching the order ROPS expects. }
+    if ParamCount > 4 then begin
+      for var I := 0 to ParamCount - 5 do begin
+        const SrcOffset = FrameSize + 40 + I * SizeOf(Pointer); { 40 = return address (8) + caller shadow space (32) }
+        const DestOffset = 32 + (I + 1) * SizeOf(Pointer); { 32 = callee shadow space, + 1 to skip param4 }
+        Inliner.MovRegMemRSP(RDX, SrcOffset);
+        Inliner.MovMemRSPReg(DestOffset, RDX);
+      end;
+    end;
+
+    { Put the original params back in the order MyAllMethodsHandler wants. }
+    Inliner.MovRegImm64(RCX, NativeUInt(Method.Data)); { Self/Data }
+    Inliner.MovRegReg(RDX, R11); { param1 }
+    if ParamCount >= 2 then
+      Inliner.MovRegReg(R8, R10); { param2 }
+    if ParamCount >= 3 then
+      Inliner.MovRegReg(R9, RAX); { param3 }
+
+    Inliner.MovRegImm64(R10, NativeUInt(Method.Code));
+    Inliner.CallReg(R10); { Call the wrapped proc }
+
+    Inliner.AddRsp(FrameSize);
+    Inliner.Ret;
+{$ENDIF}
 
     SetLength(ASMInliners, Length(ASMInliners) + 1);
     ASMInliners[High(ASMInliners)] := Inliner.SaveAsMemory;
-    Result := LongWord(ASMInliners[High(ASMInliners)]);
+    Result := NativeInt(ASMInliners[High(ASMInliners)]);
   finally
     Inliner.Free;
   end;
 end;
 
 procedure FreeASMInliners;
-var
-  I: Integer;
 begin
-  for I := 0 to High(ASMInliners) do
+  for var I := 0 to High(ASMInliners) do
     FreeMem(ASMInliners[I]);
   SetLength(ASMInliners, 0);
-end;
-
-{ TProgressThrottler }
-
-constructor TProgressThrottler.Create(const OnDownloadProgress: TOnDownloadProgress);
-begin
-  inherited Create;
-  FOnDownloadProgress := OnDownloadProgress;
-end;
-
-constructor TProgressThrottler.Create(const OnExtractionProgress: TOnExtractionProgress);
-begin
-  inherited Create;
-  FOnExtractionProgress := OnExtractionProgress;
-end;
-
-procedure TProgressThrottler.Reset;
-begin
-  FStopWatch.Stop;
-end;
-
-function TProgressThrottler.ThrottleOk(const Progress, ProgressMax: Int64): Boolean;
-begin
-  if FStopWatch.IsRunning then begin
-    Result := ((Progress = ProgressMax) and (FLastOkProgress <> ProgressMax)) or (FStopWatch.ElapsedMilliseconds >= 50);
-    if Result then
-      FStopWatch.Reset;
-  end else begin
-    Result := True;
-    FStopWatch := TStopwatch.StartNew;
-  end;
-  if Result then
-    FLastOkProgress := Progress;
-end;
-
-function TProgressThrottler.OnDownloadProgress(const Url, BaseName: string; const Progress,
-  ProgressMax: Int64): Boolean;
-begin
-  if Assigned(FOnDownloadProgress) and ThrottleOk(Progress, ProgressMax) then begin
-    Result := FOnDownloadProgress(Url, BaseName, Progress, ProgressMax)
-  end else
-    Result := True;
-end;
-
-function TProgressThrottler.OnExtractionProgress(const ArchiveName, FileName: string;
-  const Progress, ProgressMax: Int64): Boolean;
-begin
-  if Assigned(FOnExtractionProgress) and ThrottleOk(Progress, ProgressMax) then
-    Result := FOnExtractionProgress(ArchiveName, FileName, Progress, ProgressMax)
-  else
-    Result := True;
 end;
 
 initialization
 finalization
   FreeASMInliners;
+
 end.

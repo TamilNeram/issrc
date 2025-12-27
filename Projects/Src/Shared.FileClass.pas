@@ -16,7 +16,7 @@ unit Shared.FileClass;
 interface
 
 uses
-  Windows, SysUtils, Shared.Int64Em;
+  Windows, SysUtils;
 
 type
   TFileCreateDisposition = (fdCreateAlways, fdCreateNew, fdOpenExisting,
@@ -36,7 +36,6 @@ type
     function Read(var Buffer; Count: Cardinal): Cardinal; virtual; abstract;
     procedure ReadBuffer(var Buffer; Count: Cardinal);
     procedure Seek(Offset: Int64); virtual; abstract;
-    procedure Seek64(Offset: Int64);
     procedure WriteAnsiString(const S: AnsiString);
     procedure WriteBuffer(const Buffer; Count: Cardinal); virtual; abstract;
     property CappedSize: Cardinal read GetCappedSize;
@@ -58,6 +57,7 @@ type
     constructor Create(const AFilename: String;
       ACreateDisposition: TFileCreateDisposition; AAccess: TFileAccess;
       ASharing: TFileSharing);
+    constructor CreateDuplicate(const ASourceFile: TFile);
     constructor CreateWithExistingHandle(const AHandle: THandle);
     destructor Destroy; override;
     function Read(var Buffer; Count: Cardinal): Cardinal; override;
@@ -71,8 +71,8 @@ type
   TMemoryFile = class(TCustomFile)
   private
     FMemory: Pointer;
-    FSize: Integer64;
-    FPosition: Integer64;
+    FSize: Cardinal;
+    FPosition: Int64;
     function ClipCount(DesiredCount: Cardinal): Cardinal;
   protected
     procedure AllocMemory(const ASize: Cardinal);
@@ -95,14 +95,14 @@ type
     FEof: Boolean;
     FBuffer: array[0..4095] of AnsiChar;
     FSawFirstLine: Boolean;
-    FCodePage: Cardinal;
+    FCodePage: Word;
     function DoReadLine(const UTF8: Boolean): AnsiString;
     function GetEof: Boolean;
     procedure FillBuffer;
   public
     function ReadLine: String;
     function ReadAnsiLine: AnsiString;
-    property CodePage: Cardinal write FCodePage;
+    property CodePage: Word write FCodePage;
     property Eof: Boolean read GetEof;
   end;
 
@@ -148,6 +148,7 @@ implementation
 
 uses
   WideStrUtils,
+  UnsignedFunc,
   Shared.CommonFunc;
 
 const
@@ -157,14 +158,12 @@ const
 
 function TCustomFile.GetCappedSize: Cardinal;
 { Like GetSize, but capped at $7FFFFFFF }
-var
-  S: Integer64;
 begin
-  S := GetSize;
-  if (S.Hi = 0) and (S.Lo and $80000000 = 0) then
-    Result := S.Lo
+  const LSize = GetSize;
+  if LSize > High(Int32) then
+    Result := High(Int32)
   else
-    Result := $7FFFFFFF;
+    Result := Cardinal(LSize);
 end;
 
 class procedure TCustomFile.RaiseError(ErrorCode: DWORD);
@@ -196,14 +195,9 @@ begin
   end;
 end;
 
-procedure TCustomFile.Seek64(Offset: Int64);
-begin
-  Seek(Offset);
-end;
-
 procedure TCustomFile.WriteAnsiString(const S: AnsiString);
 begin
-  WriteBuffer(S[1], Length(S));
+  WriteBuffer(S[1], ULength(S));
 end;
 
 { TFile }
@@ -216,6 +210,17 @@ begin
   FHandle := CreateHandle(AFilename, ACreateDisposition, AAccess, ASharing);
   if (FHandle = 0) or (FHandle = INVALID_HANDLE_VALUE) then
     RaiseLastError;
+  FHandleCreated := True;
+end;
+
+constructor TFile.CreateDuplicate(const ASourceFile: TFile);
+begin
+  inherited Create;
+  var LHandle: THandle;
+  if not DuplicateHandle(GetCurrentProcess, ASourceFile.Handle,
+     GetCurrentProcess, @LHandle, 0, False, DUPLICATE_SAME_ACCESS) then
+    RaiseLastError;
+  FHandle := LHandle;  { assign only on success }
   FHandleCreated := True;
 end;
 
@@ -310,7 +315,7 @@ begin
   F := TFile.Create(AFilename, fdOpenExisting, faRead, fsRead);
   try
     AllocMemory(F.CappedSize);
-    F.ReadBuffer(FMemory^, FSize.Lo);
+    F.ReadBuffer(FMemory^, FSize);
   finally
     F.Free;
   end;
@@ -320,14 +325,14 @@ constructor TMemoryFile.CreateFromMemory(const ASource; const ASize: Cardinal);
 begin
   inherited Create;
   AllocMemory(ASize);
-  Move(ASource, FMemory^, FSize.Lo);
+  UMove(ASource, FMemory^, FSize);
 end;
 
 constructor TMemoryFile.CreateFromZero(const ASize: Cardinal);
 begin
   inherited Create;
   AllocMemory(ASize);
-  FillChar(FMemory^, FSize.Lo, 0);
+  UFillChar(FMemory^, FSize, 0);
 end;
 
 destructor TMemoryFile.Destroy;
@@ -342,23 +347,24 @@ begin
   FMemory := Pointer(LocalAlloc(LMEM_FIXED, ASize));
   if FMemory = nil then
     OutOfMemoryError;
-  FSize.Lo := ASize;
+  FSize := ASize;
 end;
 
 function TMemoryFile.ClipCount(DesiredCount: Cardinal): Cardinal;
-var
-  BytesLeft: Integer64;
 begin
-  { First check if FPosition is already past FSize, so the Dec6464 call below
-    won't underflow }
-  if Compare64(FPosition, FSize) >= 0 then begin
+  { First check if FPosition is already past FSize, so the subtraction below
+    won't underflow. And to be extra safe, make sure FPosition isn't negative
+    (even though Seek already checks for that). }
+  if FPosition >= FSize then begin
     Result := 0;
     Exit;
   end;
-  BytesLeft := FSize;
-  Dec6464(BytesLeft, FPosition);
-  if (BytesLeft.Hi = 0) and (BytesLeft.Lo < DesiredCount) then
-    Result := BytesLeft.Lo
+  if FPosition < 0 then
+    RaiseError(ERROR_NEGATIVE_SEEK);
+
+  const BytesLeft: Cardinal = FSize - Cardinal(FPosition);
+  if DesiredCount > BytesLeft then
+    Result := BytesLeft
   else
     Result := DesiredCount;
 end;
@@ -377,8 +383,8 @@ function TMemoryFile.Read(var Buffer; Count: Cardinal): Cardinal;
 begin
   Result := ClipCount(Count);
   if Result <> 0 then begin
-    Move(Pointer(Cardinal(FMemory) + FPosition.Lo)^, Buffer, Result);
-    Inc64(FPosition, Result);
+    UMove((PByte(FMemory) + Cardinal(FPosition))^, Buffer, Result);
+    Inc(FPosition, Result);
   end;
 end;
 
@@ -394,8 +400,8 @@ begin
   if ClipCount(Count) <> Count then
     RaiseError(ERROR_HANDLE_EOF);
   if Count <> 0 then begin
-    Move(Buffer, Pointer(Cardinal(FMemory) + FPosition.Lo)^, Count);
-    Inc64(FPosition, Count);
+    UMove(Buffer, (PByte(FMemory) + Cardinal(FPosition))^, Count);
+    Inc(FPosition, Count);
   end;
 end;
 
@@ -455,11 +461,11 @@ begin
         Break;
       Inc(I);
     end;
-    L := Length(S);
+    L := ULength(S);
     if Integer(L + (I - FBufferOffset)) < 0 then
       OutOfMemoryError;
     SetLength(S, L + (I - FBufferOffset));
-    Move(FBuffer[FBufferOffset], S[L+1], I - FBufferOffset);
+    UMove(FBuffer[FBufferOffset], S[L+1], I - FBufferOffset);
     FBufferOffset := I;
 
     if FBufferOffset < FBufferSize then begin
@@ -492,7 +498,7 @@ begin
           if DetectUTF8Encoding(S2) in [etUSASCII, etUTF8] then
             FCodePage := CP_UTF8;
         finally
-          Seek64(OldPosition);
+          Seek(OldPosition);
         end;
       end;
     end;
@@ -523,15 +529,13 @@ const
   CRLF: array[0..1] of AnsiChar = (#13, #10);
   UTF8BOM: array[0..2] of AnsiChar = (#$EF, #$BB, #$BF);
 var
-  I: Integer64;
   C: AnsiChar;
 begin
   if not FSeekedToEnd then begin
-    I := GetSize;
-    if (I.Lo <> 0) or (I.Hi <> 0) then begin
+    const LSize = GetSize;
+    if LSize <> 0 then begin
       { File is not empty. Figure out if we have to append a line break. }
-      Dec64(I, SizeOf(C));
-      Seek64(I);
+      Seek(LSize - SizeOf(C));
       ReadBuffer(C, SizeOf(C));
       case C of
         #10: ;  { do nothing - file ends in LF or CRLF }
@@ -548,7 +552,7 @@ begin
       WriteBuffer(UTF8BOM, SizeOf(UTF8BOM));
     FSeekedToEnd := True;
   end;
-  WriteBuffer(Pointer(S)^, Length(S));
+  WriteBuffer(Pointer(S)^, ULength(S));
 end;
 
 procedure TTextFileWriter.Write(const S: String);
@@ -573,8 +577,6 @@ end;
 
 { TFileMapping }
 
-type
-  NTSTATUS = Longint;
 var
   _RtlNtStatusToDosError: function(Status: NTSTATUS): ULONG; stdcall;
 
@@ -633,23 +635,28 @@ var
   E: TObject;
 begin
   E := ExceptObject;
-  if (E is EExternalException) and
-     (EExternalException(E).ExceptionRecord.ExceptionCode = EXCEPTION_IN_PAGE_ERROR) and
-     (Cardinal(EExternalException(E).ExceptionRecord.NumberParameters) >= Cardinal(2)) and
-     (Cardinal(EExternalException(E).ExceptionRecord.ExceptionInformation[1]) >= Cardinal(FMemory)) and
-     (Cardinal(EExternalException(E).ExceptionRecord.ExceptionInformation[1]) < Cardinal(Cardinal(FMemory) + FMapSize)) then begin
-    { There should be a third parameter containing the NT status code of the error
-      condition that caused the exception. Convert that into a Win32 error code
-      and use it to generate our error message. }
-    if (Cardinal(EExternalException(E).ExceptionRecord.NumberParameters) >= Cardinal(3)) and
-       Assigned(_RtlNtStatusToDosError) then
-      TFile.RaiseError(_RtlNtStatusToDosError(EExternalException(E).ExceptionRecord.ExceptionInformation[2]))
-    else begin
-      { Use generic "The system cannot [read|write] to the specified device" errors }
-      if EExternalException(E).ExceptionRecord.ExceptionInformation[0] = 0 then
-        TFile.RaiseError(ERROR_READ_FAULT)
-      else
-        TFile.RaiseError(ERROR_WRITE_FAULT);
+  if E is EExternalException then begin
+    const ExceptionRecord = EExternalException(E).ExceptionRecord;
+    if (ExceptionRecord.ExceptionCode = EXCEPTION_IN_PAGE_ERROR) and
+       (Cardinal(ExceptionRecord.NumberParameters) >= Cardinal(2)) then begin
+      const MemoryStart: PByte = PByte(FMemory);
+      const MemoryEnd: PByte = MemoryStart + FMapSize;
+      const FaultAddress: PByte = PByte(ExceptionRecord.ExceptionInformation[1]);
+      if (FaultAddress >= MemoryStart) and (FaultAddress < MemoryEnd) then begin
+        { There should be a third parameter containing the NT status code of the error
+          condition that caused the exception. Convert that into a Win32 error code
+          and use it to generate our error message. }
+        if (Cardinal(ExceptionRecord.NumberParameters) >= Cardinal(3)) and
+           Assigned(_RtlNtStatusToDosError) then
+          TFile.RaiseError(_RtlNtStatusToDosError(NTSTATUS(ExceptionRecord.ExceptionInformation[2])))
+        else begin
+          { Use generic "The system cannot [read|write] to the specified device" errors }
+          if ExceptionRecord.ExceptionInformation[0] = 0 then
+            TFile.RaiseError(ERROR_READ_FAULT)
+          else
+            TFile.RaiseError(ERROR_WRITE_FAULT);
+        end;
+      end;
     end;
   end;
 end;

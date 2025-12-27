@@ -12,11 +12,13 @@ unit Setup.InstFunc;
 interface
 
 uses
-  Windows, SysUtils, Shared.Int64Em, SHA256, Shared.CommonFunc, Shared.FileClass;
+  Windows, SysUtils, Diagnostics, SHA256,
+  Shared.CommonFunc, Shared.FileClass,
+  Setup.DownloadFileFunc, Compression.SevenZipDecoder;
 
 type
   PSimpleStringListArray = ^TSimpleStringListArray;
-  TSimpleStringListArray = array[0..$1FFFFFFE] of String;
+  TSimpleStringListArray = array[0..$7FFFFFFF div SizeOf(String) - 1] of String;
   TSimpleStringList = class
   private
     FList: PSimpleStringListArray;
@@ -44,6 +46,22 @@ type
   { Must keep this in synch with Compiler.ScriptFunc.pas: }
   TExecWait = (ewNoWait, ewWaitUntilTerminated, ewWaitUntilIdle);
 
+  { Only reports progress at start or finish, or if at least 50 ms passed since last report }
+  TProgressThrottler = class
+  private
+    FOnDownloadProgress: TOnDownloadProgress;
+    FOnExtractionProgress: TOnExtractionProgress;
+    FStopWatch: TStopWatch;
+    FLastOkProgress: Int64;
+    function ThrottleOk(const Progress, ProgressMax: Int64): Boolean;
+  public
+    constructor Create(const OnDownloadProgress: TOnDownloadProgress); overload;
+    constructor Create(const OnExtractionProgress: TOnExtractionProgress); overload;
+    procedure Reset;
+    function OnDownloadProgress(const Url, BaseName: string; const Progress, ProgressMax: Int64): Boolean;
+    function OnExtractionProgress(const ArchiveName, FileName: string; const Progress, ProgressMax: Int64): Boolean;
+  end;
+
 function CheckForMutexes(const Mutexes: String): Boolean;
 procedure CreateMutexes(const Mutexes: String);
 function DecrementSharedCount(const RegView: TRegView; const Filename: String): Boolean;
@@ -53,8 +71,6 @@ function DelTree(const DisableFsRedir: Boolean; const Path: String;
   const Param: Pointer): Boolean;
 procedure EnumFileReplaceOperationsFilenames(const EnumFunc: TEnumFROFilenamesProc;
   Param: Pointer);
-function GenerateNonRandomUniqueTempDir(const LimitCurrentUserSidAccess: Boolean;
-  Path: String; var TempDir: String): Boolean;
 function GetComputerNameString: String;
 function GetFileDateTime(const DisableFsRedir: Boolean; const Filename: String;
   var DateTime: TFileTime): Boolean;
@@ -64,19 +80,19 @@ function GetSHA256OfAnsiString(const S: AnsiString): TSHA256Digest;
 function GetSHA256OfUnicodeString(const S: UnicodeString): TSHA256Digest;
 function GetRegRootKeyName(const RootKey: HKEY): String;
 function GetSpaceOnDisk(const DisableFsRedir: Boolean; const DriveRoot: String;
-  var FreeBytes, TotalBytes: Integer64): Boolean;
+  var FreeBytes, TotalBytes: Int64): Boolean;
 function GetSpaceOnNearestMountPoint(const DisableFsRedir: Boolean;
-  const StartDir: String; var FreeBytes, TotalBytes: Integer64): Boolean;
+  const StartDir: String; var FreeBytes, TotalBytes: Int64): Boolean;
 function GetUserNameString: String;
 procedure IncrementSharedCount(const RegView: TRegView; const Filename: String;
   const AlreadyExisted: Boolean);
 function InstExec(const DisableFsRedir: Boolean; const Filename, Params: String;
   WorkingDir: String; const Wait: TExecWait; const ShowCmd: Integer;
   const ProcessMessagesProc: TProcedure; const OutputReader: TCreateProcessOutputReader;
-  var ResultCode: Integer): Boolean;
+  var ResultCode: DWORD): Boolean;
 function InstShellExec(const Verb, Filename, Params: String; WorkingDir: String;
   const Wait: TExecWait; const ShowCmd: Integer;
-  const ProcessMessagesProc: TProcedure; var ResultCode: Integer): Boolean;
+  const ProcessMessagesProc: TProcedure; var ResultCode: DWORD): Boolean;
 procedure InternalError(const Id: String);
 procedure InternalErrorFmt(const S: String; const Args: array of const);
 function IsDirEmpty(const DisableFsRedir: Boolean; const Dir: String): Boolean;
@@ -84,24 +100,24 @@ function IsProtectedSystemFile(const DisableFsRedir: Boolean;
   const Filename: String): Boolean;
 function MakePendingFileRenameOperationsChecksum: TSHA256Digest;
 function ModifyPifFile(const Filename: String; const CloseOnExit: Boolean): Boolean;
-procedure RaiseFunctionFailedError(const FunctionName: String);
 procedure RaiseOleError(const FunctionName: String; const ResultCode: HRESULT);
 procedure RefreshEnvironment;
 function ReplaceSystemDirWithSysWow64(const Path: String): String;
 function ReplaceSystemDirWithSysNative(Path: String; const IsWin64: Boolean): String;
 procedure UnregisterFont(const FontName, FontFilename: String; const PerUserFont: Boolean);
 procedure RestartReplace(const DisableFsRedir: Boolean; TempFile, DestFile: String);
-procedure SplitNewParamStr(const Index: Integer; var AName, AValue: String);
 procedure Win32ErrorMsg(const FunctionName: String);
 procedure Win32ErrorMsgEx(const FunctionName: String; const ErrorCode: DWORD);
 function ForceDirectories(const DisableFsRedir: Boolean; Dir: String): Boolean;
+procedure AddAttributesToFile(const DisableFsRedir: Boolean; const Filename: String; Attribs: Integer);
 
 implementation
 
 uses
-  Messages, ShellApi, PathFunc, SetupLdrAndSetup.InstFunc, SetupLdrAndSetup.Messages,
-  Shared.SetupMessageIDs, SetupLdrAndSetup.RedirFunc, Shared.SetupTypes,
-  Classes, RegStr, Math;
+  Messages, ShellApi, Classes, RegStr, Math,
+  PathFunc, UnsignedFunc,
+  Shared.SetupTypes, Shared.SetupMessageIDs,
+  SetupLdrAndSetup.InstFunc, SetupLdrAndSetup.Messages, Setup.RedirFunc;
 
 procedure InternalError(const Id: String);
 begin
@@ -127,68 +143,24 @@ end;
 procedure RaiseOleError(const FunctionName: String; const ResultCode: HRESULT);
 begin
   raise Exception.Create(FmtSetupMessage(msgErrorFunctionFailedWithMessage,
-    [FunctionName, IntToHexStr8(ResultCode), Win32ErrorString(ResultCode)]));
-end;
-
-procedure RaiseFunctionFailedError(const FunctionName: String);
-begin
-  raise Exception.Create(FmtSetupMessage1(msgErrorFunctionFailedNoCode,
-    FunctionName));
+    [FunctionName, IntToHexStr8(ResultCode), Win32ErrorString(DWORD(ResultCode))]));
 end;
 
 function GetRegRootKeyName(const RootKey: HKEY): String;
 begin
-  case RootKey of
-    HKEY_AUTO: InternalError('GetRegRootKeyName called for HKEY_AUTO');
-    HKEY_CLASSES_ROOT: Result := 'HKEY_CLASSES_ROOT';
-    HKEY_CURRENT_USER: Result := 'HKEY_CURRENT_USER';
-    HKEY_LOCAL_MACHINE: Result := 'HKEY_LOCAL_MACHINE';
-    HKEY_USERS: Result := 'HKEY_USERS';
-    HKEY_PERFORMANCE_DATA: Result := 'HKEY_PERFORMANCE_DATA';
-    HKEY_CURRENT_CONFIG: Result := 'HKEY_CURRENT_CONFIG';
-    HKEY_DYN_DATA: Result := 'HKEY_DYN_DATA';
+  case UInt32(RootKey) of
+    UInt32(HKEY_AUTO): InternalError('GetRegRootKeyName called for HKEY_AUTO');
+    UInt32(HKEY_CLASSES_ROOT): Result := 'HKEY_CLASSES_ROOT';
+    UInt32(HKEY_CURRENT_USER): Result := 'HKEY_CURRENT_USER';
+    UInt32(HKEY_LOCAL_MACHINE): Result := 'HKEY_LOCAL_MACHINE';
+    UInt32(HKEY_USERS): Result := 'HKEY_USERS';
+    UInt32(HKEY_PERFORMANCE_DATA): Result := 'HKEY_PERFORMANCE_DATA';
+    UInt32(HKEY_CURRENT_CONFIG): Result := 'HKEY_CURRENT_CONFIG';
+    UInt32(HKEY_DYN_DATA): Result := 'HKEY_DYN_DATA';
   else
     { unknown - shouldn't get here }
-    Result := Format('[%x]', [Cardinal(RootKey)]);
+    Result := Format('[%x]', [UInt32(RootKey)]);
   end;
-end;
-
-function GenerateNonRandomUniqueTempDir(const LimitCurrentUserSidAccess: Boolean;
-  Path: String; var TempDir: String): Boolean;
-{ Creates a new temporary directory with a non-random name. Returns True if an
-  existing directory was re-created. This is called by Uninstall. A non-random
-  name is used because the uninstaller EXE isn't able to delete itself; if it were
-  random, there would be one directory added each time an uninstaller is run. }
-var
-  Rand, RandOrig: Longint; { These are actually NOT random in any way }
-  ErrorCode: DWORD;
-begin
-  Path := AddBackslash(Path);
-  RandOrig := $123456;
-  Rand := RandOrig;
-  repeat
-    Result := False;
-    Inc(Rand);
-    if Rand > $1FFFFFF then Rand := 0;
-    if Rand = RandOrig then
-      { practically impossible to go through 33 million possibilities,
-        but check "just in case"... }
-      raise Exception.Create(FmtSetupMessage1(msgErrorTooManyFilesInDir,
-        RemoveBackslashUnlessRoot(Path)));
-    { Generate a "random" name }
-    TempDir := Path + 'iu-' + IntToBase32(Rand) + '.tmp';
-    if DirExists(TempDir) then begin
-      if not DeleteDirTree(TempDir) then Continue;
-      Result := True;
-    end else if NewFileExists(TempDir) then
-      if not DeleteFile(TempDir) then Continue;
-
-    if CreateSafeDirectory(LimitCurrentUserSidAccess, TempDir, ErrorCode) then Break;
-    if ErrorCode <> ERROR_ALREADY_EXISTS then
-      raise Exception.Create(FmtSetupMessage(msgLastErrorMessage,
-        [FmtSetupMessage1(msgErrorCreatingDir, TempDir), IntToStr(ErrorCode),
-         Win32ErrorString(ErrorCode)]));
-  until False; // continue until a new directory was created
 end;
 
 function ReplaceSystemDirWithSysWow64(const Path: String): String;
@@ -397,21 +369,20 @@ procedure IncrementSharedCount(const RegView: TRegView; const Filename: String;
 const
   SharedDLLsKey = REGSTR_PATH_SETUP + '\SharedDLLs';  {don't localize}
 var
-  ErrorCode: Longint;
   K: HKEY;
-  Disp, Size, Count, CurType, NewType: DWORD;
+  Disp, Size, CurType, NewType: DWORD;
   CountStr: String;
   FilenameP: PChar;
 begin
-  ErrorCode := RegCreateKeyExView(RegView, HKEY_LOCAL_MACHINE, SharedDLLsKey, 0, nil,
-    REG_OPTION_NON_VOLATILE, KEY_QUERY_VALUE or KEY_SET_VALUE, nil, K, @Disp);
+  const ErrorCode = Cardinal(RegCreateKeyExView(RegView, HKEY_LOCAL_MACHINE, SharedDLLsKey, 0, nil,
+    REG_OPTION_NON_VOLATILE, KEY_QUERY_VALUE or KEY_SET_VALUE, nil, K, @Disp));
   if ErrorCode <> ERROR_SUCCESS then
     raise Exception.Create(FmtSetupMessage(msgErrorRegOpenKey,
         [GetRegRootKeyName(HKEY_LOCAL_MACHINE), SharedDLLsKey]) + SNewLine2 +
       FmtSetupMessage(msgErrorFunctionFailedWithMessage,
         ['RegCreateKeyEx', IntToStr(ErrorCode), Win32ErrorString(ErrorCode)]));
   FilenameP := PChar(Filename);
-  Count := 0;
+  var Count := 0;
   NewType := REG_DWORD;
   try
     if RegQueryValueEx(K, FilenameP, nil, @CurType, nil, @Size) = ERROR_SUCCESS then
@@ -423,7 +394,7 @@ begin
           end;
         REG_BINARY: begin
             if (Size >= 1) and (Size <= 4) then begin
-              if RegQueryValueEx(K, FilenameP, nil, nil, @Count, @Size) <> ERROR_SUCCESS then
+              if RegQueryValueEx(K, FilenameP, nil, nil, PByte(@Count), @Size) <> ERROR_SUCCESS then
                 { ^ relies on the high 3 bytes of Count being initialized to 0 }
                 Abort;
               NewType := REG_BINARY;
@@ -431,21 +402,22 @@ begin
           end;
         REG_DWORD: begin
             Size := SizeOf(DWORD);
-            if RegQueryValueEx(K, FilenameP, nil, nil, @Count, @Size) <> ERROR_SUCCESS then
+            if RegQueryValueEx(K, FilenameP, nil, nil, PByte(@Count), @Size) <> ERROR_SUCCESS then
               Abort;
           end;
       end;
   except
     Count := 0;
   end;
-  if Integer(Count) < 0 then Count := 0;  { just in case... }
+  if Count < 0 then
+    Count := 0;  { just in case... }
   if (Count = 0) and AlreadyExisted then
     Inc(Count);
   Inc(Count);
   case NewType of
     REG_SZ: begin
         CountStr := IntToStr(Count);
-        RegSetValueEx(K, FilenameP, 0, NewType, PChar(CountStr), (Length(CountStr)+1)*SizeOf(CountStr[1]));
+        RegSetValueEx(K, FilenameP, 0, NewType, PChar(CountStr), (ULength(CountStr)+1)*SizeOf(CountStr[1]));
       end;
     REG_BINARY, REG_DWORD:
       RegSetValueEx(K, FilenameP, 0, NewType, @Count, SizeOf(Count));
@@ -460,16 +432,15 @@ function DecrementSharedCount(const RegView: TRegView;
 const
   SharedDLLsKey = REGSTR_PATH_SETUP + '\SharedDLLs';  {don't localize}
 var
-  ErrorCode: Longint;
   K: HKEY;
   CountRead: Boolean;
-  Count, CurType, Size: DWORD;
+  CurType, Size: DWORD;
   CountStr: String;
 begin
   Result := False;
 
-  ErrorCode := RegOpenKeyExView(RegView, HKEY_LOCAL_MACHINE, SharedDLLsKey, 0,
-    KEY_QUERY_VALUE or KEY_SET_VALUE, K);
+  const ErrorCode = Cardinal(RegOpenKeyExView(RegView, HKEY_LOCAL_MACHINE, SharedDLLsKey, 0,
+    KEY_QUERY_VALUE or KEY_SET_VALUE, K));
   if ErrorCode = ERROR_FILE_NOT_FOUND then
     Exit;
   if ErrorCode <> ERROR_SUCCESS then
@@ -482,7 +453,7 @@ begin
       Exit;
 
     CountRead := False;
-    Count := 0;
+    var Count := 0;
     try
       case CurType of
         REG_SZ:
@@ -492,14 +463,14 @@ begin
           end;
         REG_BINARY: begin
             if (Size >= 1) and (Size <= 4) then begin
-              if RegQueryValueEx(K, PChar(Filename), nil, nil, @Count, @Size) = ERROR_SUCCESS then
+              if RegQueryValueEx(K, PChar(Filename), nil, nil, PByte(@Count), @Size) = ERROR_SUCCESS then
                 { ^ relies on the high 3 bytes of Count being initialized to 0 }
                 CountRead := True;
             end;
           end;
         REG_DWORD: begin
             Size := SizeOf(DWORD);
-            if RegQueryValueEx(K, PChar(Filename), nil, nil, @Count, @Size) = ERROR_SUCCESS then
+            if RegQueryValueEx(K, PChar(Filename), nil, nil, PByte(@Count), @Size) = ERROR_SUCCESS then
               CountRead := True;
           end;
       end;
@@ -512,7 +483,7 @@ begin
       Exit;
 
     Dec(Count);
-    if Integer(Count) <= 0 then begin
+    if Count <= 0 then begin
       Result := True;
       RegDeleteValue(K, PChar(Filename));
     end
@@ -520,7 +491,7 @@ begin
       case CurType of
         REG_SZ: begin
             CountStr := IntToStr(Count);
-            RegSetValueEx(K, PChar(Filename), 0, REG_SZ, PChar(CountStr), (Length(CountStr)+1)*SizeOf(Char));
+            RegSetValueEx(K, PChar(Filename), 0, REG_SZ, PChar(CountStr), (ULength(CountStr)+1)*SizeOf(Char));
           end;
         REG_BINARY, REG_DWORD:
           RegSetValueEx(K, PChar(Filename), 0, CurType, @Count, SizeOf(Count));
@@ -583,12 +554,12 @@ end;
 
 function GetSHA256OfAnsiString(const S: AnsiString): TSHA256Digest;
 begin
-  Result := SHA256Buf(Pointer(S)^, Length(S)*SizeOf(S[1]));
+  Result := SHA256Buf(Pointer(S)^, ULength(S)*SizeOf(S[1]));
 end;
 
 function GetSHA256OfUnicodeString(const S: UnicodeString): TSHA256Digest;
 begin
-  Result := SHA256Buf(Pointer(S)^, Length(S)*SizeOf(S[1]));
+  Result := SHA256Buf(Pointer(S)^, ULength(S)*SizeOf(S[1]));
 end;
 
 var
@@ -625,7 +596,7 @@ end;
 
 procedure HandleProcessWait(ProcessHandle: THandle; const Wait: TExecWait;
   const ProcessMessagesProc: TProcedure; const OutputReader: TCreateProcessOutputReader;
-  var ResultCode: Integer);
+  var ResultCode: DWORD);
 begin
   try
     if Wait = ewWaitUntilIdle then begin
@@ -636,7 +607,7 @@ begin
     if Wait = ewWaitUntilTerminated then begin
       { Wait until the process returns, but still process any messages that
         arrive and read the output if requested. }
-      var WaitMilliseconds := IfThen(OutputReader <> nil, 50, INFINITE);
+      var WaitMilliseconds := Cardinal(IfThen(OutputReader <> nil, 50, INFINITE));
       var WaitResult: DWORD := 0;
       repeat
         { Process any pending messages first because MsgWaitForMultipleObjects
@@ -659,7 +630,7 @@ begin
     end;
     { Get the exit code. Will be set to STILL_ACTIVE if not yet available }
     if not GetExitCodeProcess(ProcessHandle, DWORD(ResultCode)) then
-      ResultCode := -1;  { just in case }
+      ResultCode := DWORD(-1);  { just in case }
   finally
     CloseHandle(ProcessHandle);
   end;
@@ -668,7 +639,7 @@ end;
 function InstExec(const DisableFsRedir: Boolean; const Filename, Params: String;
   WorkingDir: String; const Wait: TExecWait; const ShowCmd: Integer;
   const ProcessMessagesProc: TProcedure; const OutputReader: TCreateProcessOutputReader;
-  var ResultCode: Integer): Boolean;
+  var ResultCode: DWORD): Boolean;
 var
   CmdLine: String;
   StartupInfo: TStartupInfo;
@@ -704,7 +675,7 @@ begin
   FillChar(StartupInfo, SizeOf(StartupInfo), 0);
   StartupInfo.cb := SizeOf(StartupInfo);
   StartupInfo.dwFlags := STARTF_USESHOWWINDOW;
-  StartupInfo.wShowWindow := ShowCmd;
+  StartupInfo.wShowWindow := Word(ShowCmd);
   if WorkingDir = '' then
     WorkingDir := GetSystemDir;
 
@@ -735,7 +706,7 @@ end;
 
 function InstShellExec(const Verb, Filename, Params: String; WorkingDir: String;
   const Wait: TExecWait; const ShowCmd: Integer;
-  const ProcessMessagesProc: TProcedure; var ResultCode: Integer): Boolean;
+  const ProcessMessagesProc: TProcedure; var ResultCode: DWORD): Boolean;
 var
   Info: TShellExecuteInfo;
 begin
@@ -883,11 +854,11 @@ begin
     if RegOpenKeyExView(rvDefault, HKEY_LOCAL_MACHINE, 'SYSTEM\CurrentControlSet\Control\Session Manager',
        0, KEY_QUERY_VALUE, K) = ERROR_SUCCESS then begin
       if RegQueryMultiStringValue(K, 'PendingFileRenameOperations', S) then
-        SHA256Update(Context, S[1], Length(S)*SizeOf(S[1]));
+        SHA256Update(Context, S[1], ULength(S)*SizeOf(S[1]));
       { When "PendingFileRenameOperations" is full, it spills over into
         "PendingFileRenameOperations2" }
       if RegQueryMultiStringValue(K, 'PendingFileRenameOperations2', S) then
-        SHA256Update(Context, S[1], Length(S)*SizeOf(S[1]));
+        SHA256Update(Context, S[1], ULength(S)*SizeOf(S[1]));
       RegCloseKey(K);
     end;
   except
@@ -960,7 +931,7 @@ begin
 end;
 
 function GetSpaceOnDisk(const DisableFsRedir: Boolean; const DriveRoot: String;
-  var FreeBytes, TotalBytes: Integer64): Boolean;
+  var FreeBytes, TotalBytes: Int64): Boolean;
 var
   GetDiskFreeSpaceExFunc: function(lpDirectoryName: PChar;
     lpFreeBytesAvailable: PLargeInteger; lpTotalNumberOfBytes: PLargeInteger;
@@ -982,19 +953,16 @@ begin
   try
     if Assigned(@GetDiskFreeSpaceExFunc) then begin
       Result := GetDiskFreeSpaceExFunc(PChar(AddBackslash(PathExpand(DriveRoot))),
-        @TLargeInteger(Int64Rec(FreeBytes)), @TLargeInteger(Int64Rec(TotalBytes)), nil);
+        @FreeBytes, @TotalBytes, nil);
     end
     else begin
       Result := GetDiskFreeSpace(PChar(AddBackslash(PathExtractDrive(PathExpand(DriveRoot)))),
-        DWORD(SectorsPerCluster), DWORD(BytesPerSector), DWORD(FreeClusters),
-        DWORD(TotalClusters));
+        SectorsPerCluster, BytesPerSector, FreeClusters, TotalClusters);
       if Result then begin
         { The result of GetDiskFreeSpace does not cap at 2GB, so we must use a
           64-bit multiply operation to avoid an overflow. }
-        Multiply32x32to64(BytesPerSector * SectorsPerCluster, FreeClusters,
-          FreeBytes);
-        Multiply32x32to64(BytesPerSector * SectorsPerCluster, TotalClusters,
-          TotalBytes);
+        FreeBytes := Int64(BytesPerSector * SectorsPerCluster) * FreeClusters;
+        TotalBytes := Int64(BytesPerSector * SectorsPerCluster) * TotalClusters;
       end;
     end;
   finally
@@ -1003,7 +971,7 @@ begin
 end;
 
 function GetSpaceOnNearestMountPoint(const DisableFsRedir: Boolean;
-  const StartDir: String; var FreeBytes, TotalBytes: Integer64): Boolean;
+  const StartDir: String; var FreeBytes, TotalBytes: Int64): Boolean;
 { Gets the free and total space available on the specified directory. If that
   fails (e.g. if the directory does not exist), then it strips off the last
   component of the path and tries again. This repeats until it reaches the
@@ -1041,27 +1009,6 @@ begin
     LPARAM(PChar('Environment')), SMTO_ABORTIFHUNG, 5000, @MsgResult);
 end;
 
-procedure SplitNewParamStr(const Index: Integer; var AName, AValue: String);
-{ Reads a command line parameter. If it is in the form "/PARAM=VALUE" then
-  AName is set to "/PARAM=" and AValue is set to "VALUE". Otherwise, the full
-  parameter is stored in AName, and AValue is set to an empty string. }
-var
-  S: String;
-  P: Integer;
-begin
-  S := NewParamStr(Index);
-  if (S <> '') and (S[1] = '/') then begin
-    P := PathPos('=', S);
-    if P <> 0 then begin
-      AName := Copy(S, 1, P);
-      AValue := Copy(S, P+1, Maxint);
-      Exit;
-    end;
-  end;
-  AName := S;
-  AValue := '';
-end;
-
 function ForceDirectories(const DisableFsRedir: Boolean; Dir: String): Boolean;
 begin
   Dir := RemoveBackslashUnlessRoot(Dir);
@@ -1070,6 +1017,19 @@ begin
   else
     Result := ForceDirectories(DisableFsRedir, PathExtractPath(Dir)) and
       CreateDirectoryRedir(DisableFsRedir, Dir);
+end;
+
+procedure AddAttributesToFile(const DisableFsRedir: Boolean;
+  const Filename: String; Attribs: Integer);
+var
+  ExistingAttr: DWORD;
+begin
+  if Attribs <> 0 then begin
+    ExistingAttr := GetFileAttributesRedir(DisableFsRedir, Filename);
+    if ExistingAttr <> INVALID_FILE_ATTRIBUTES then
+      SetFileAttributesRedir(DisableFsRedir, Filename,
+        (ExistingAttr and not FILE_ATTRIBUTE_NORMAL) or DWORD(Attribs));
+  end;
 end;
 
 { TSimpleStringList }
@@ -1131,6 +1091,57 @@ destructor TSimpleStringList.Destroy;
 begin
   Clear;
   inherited Destroy;
+end;
+
+{ TProgressThrottler }
+
+constructor TProgressThrottler.Create(const OnDownloadProgress: TOnDownloadProgress);
+begin
+  inherited Create;
+  FOnDownloadProgress := OnDownloadProgress;
+end;
+
+constructor TProgressThrottler.Create(const OnExtractionProgress: TOnExtractionProgress);
+begin
+  inherited Create;
+  FOnExtractionProgress := OnExtractionProgress;
+end;
+
+procedure TProgressThrottler.Reset;
+begin
+  FStopWatch.Stop;
+end;
+
+function TProgressThrottler.ThrottleOk(const Progress, ProgressMax: Int64): Boolean;
+begin
+  if FStopWatch.IsRunning then begin
+    Result := ((Progress = ProgressMax) and (FLastOkProgress <> ProgressMax)) or (FStopWatch.ElapsedMilliseconds >= 50);
+    if Result then
+      FStopWatch.Reset;
+  end else begin
+    Result := True;
+    FStopWatch := TStopwatch.StartNew;
+  end;
+  if Result then
+    FLastOkProgress := Progress;
+end;
+
+function TProgressThrottler.OnDownloadProgress(const Url, BaseName: string; const Progress,
+  ProgressMax: Int64): Boolean;
+begin
+  if Assigned(FOnDownloadProgress) and ThrottleOk(Progress, ProgressMax) then begin
+    Result := FOnDownloadProgress(Url, BaseName, Progress, ProgressMax)
+  end else
+    Result := True;
+end;
+
+function TProgressThrottler.OnExtractionProgress(const ArchiveName, FileName: string;
+  const Progress, ProgressMax: Int64): Boolean;
+begin
+  if Assigned(FOnExtractionProgress) and ThrottleOk(Progress, ProgressMax) then
+    Result := FOnExtractionProgress(ArchiveName, FileName, Progress, ProgressMax)
+  else
+    Result := True;
 end;
 
 end.

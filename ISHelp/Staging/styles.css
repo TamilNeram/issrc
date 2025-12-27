@@ -14,7 +14,7 @@
 	--link-fg-color: light-dark(hsl(206, 100%, 37%), hsl(206, 100%, 50%));
 	--link-hover-fg-color: light-dark(hsl(206, 100%, 27%), hsl(206, 100%, 43%));
 	--header-bg-color: light-dark(#e0e0e0, #403e41);
-	--code-bg-color: light-dark(#f0f0f0, #403e41);
+	--code-bg-color: light-dark(#f0f0f0, #353135);
 }
 HTML {
 	/* Ensure that anchor targets don't get hidden underneath the sticky header.
@@ -56,9 +56,11 @@ TD {
 	vertical-align: baseline;
 }
 IMG {
+	border-style: none;
+}
+IMG.extlink {
 	width: 16px;
 	height: 16px;
-	border-style: none;
 	padding-left: 2px;
 }
 A:link, A:visited {
@@ -72,7 +74,7 @@ A[href]:hover {
 	color: var(--link-hover-fg-color);
 	text-decoration: underline;
 }
-A.highlighted {
+span:target {
 	background-color: #ffff00;
 	color: black;
 }

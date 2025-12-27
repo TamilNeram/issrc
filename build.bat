@@ -20,33 +20,15 @@ rem  Once done the installer can be found in Output
 
 setlocal
 
-set VER=6.5.0-dev
+set VER=6.7.0-dev
 
 echo Building Inno Setup %VER%...
 echo.
 
 cd /d %~dp0
 
-if "%1"=="setup" goto setup
+if /I "%1"=="setup" goto setup
 if not "%1"=="" goto failed
-
-cd ishelp\ishelpgen
-if errorlevel 1 goto failed
-call .\compile.bat
-if errorlevel 1 goto failed
-cd ..\..
-if errorlevel 1 goto failed
-echo Compiling ISHelpGen done
-pause
-
-cd ishelp
-if errorlevel 1 goto failed
-call .\compile.bat
-if errorlevel 1 goto failed
-cd ..
-if errorlevel 1 goto failed
-echo Compiling ISetup*.chm done
-pause
 
 call .\compile.bat issigtool
 if errorlevel 1 goto failed
@@ -56,9 +38,12 @@ rem  Verify precompiled binaries which are used during compilation
 rem  Note: Other precompiled binaries are verified by Setup.iss
 call .\issig.bat verify --key-file=def01.ispublickey ^
   Projects\Src\Setup.HelperEXEs.res ^
-  Projects\Src\Compression.LZMADecompressor\Lzma2Decode\ISLzmaDec.obj ^
-  Projects\Src\Compression.LZMA1SmallDecompressor\LzmaDecode\LzmaDecodeInno.obj ^
-  Projects\Src\Compression.SevenZipDecoder\7zDecode\IS7zDec.obj
+  Projects\Src\Compression.LZMADecompressor\Lzma2Decode\ISLzmaDec-x86.obj ^
+  Projects\Src\Compression.LZMADecompressor\Lzma2Decode\ISLzmaDec-x64.obj ^
+  Projects\Src\Compression.LZMA1SmallDecompressor\LzmaDecode\LzmaDecodeInno-x86.obj ^
+  Projects\Src\Compression.LZMA1SmallDecompressor\LzmaDecode\LzmaDecodeInno-x64.obj ^
+  Projects\Src\Compression.SevenZipDecoder\7zDecode\IS7zDec-x86.obj ^
+  Projects\Src\Compression.SevenZipDecoder\7zDecode\IS7zDec-x64.obj
 if errorlevel 1 goto failed
 echo ISSigTool verify done
 
@@ -78,10 +63,19 @@ if exist .\setup-presign.bat (
   echo Presign done
 ) 
 
-rem  Sign using user's private key
-call .\issig.bat sign Files\ISCmplr.dll Files\ISPP.dll Files\Setup.e32 Files\SetupLdr.e32
+rem  Sign using user's private key - also see compile.bat
+call .\issig.bat sign Files\ISCmplr.dll Files\ISPP.dll Files\Setup.e32 Files\Setup.e64 Files\SetupCustomStyle.e32 Files\SetupCustomStyle.e64 Files\SetupLdr.e32 Files\SetupLdr.e64
 if errorlevel 1 goto failed
 echo ISSigTool sign done
+pause
+
+cd ishelp
+if errorlevel 1 goto failed
+call .\compile.bat
+if errorlevel 1 goto failed
+cd ..
+if errorlevel 1 goto failed
+echo Compiling ISetup*.chm done
 pause
 
 :setup

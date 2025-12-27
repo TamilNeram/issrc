@@ -7,6 +7,12 @@ unit PathFunc;
   For conditions of distribution and use, see LICENSE.TXT.
 
   This unit provides some path-related functions.
+
+  The string comparison functions (including PathCompare, PathEndsWith, PathHasSubstringAt,
+  PathSame, PathStartsWith, PathStrCompare, PathStrFind) all ignore case by
+  default, and use a locale-independent "ordinal" comparison, which is important
+  when comparing filenames/paths. Despite the "Path" prefix, however, the
+  functions can be used to compare any kind of text, not just filenames/paths.
 }
 
 interface
@@ -18,11 +24,13 @@ function PathCharIsSlash(const C: Char): Boolean;
 function PathCharIsTrailByte(const S: String; const Index: Integer): Boolean;
 function PathCharLength(const S: String; const Index: Integer): Integer;
 function PathCombine(const Dir, Filename: String): String;
-function PathCompare(const S1, S2: String): Integer;
-function PathSame(const S1, S2: String): Boolean;
+function PathCompare(const S1, S2: String; const IgnoreCase: Boolean = True): Integer;
+function PathConvertSuperToNormal(const Filename: String): String;
 function PathDrivePartLength(const Filename: String): Integer;
 function PathDrivePartLengthEx(const Filename: String;
   const IncludeSignificantSlash: Boolean): Integer;
+function PathEndsWith(const S, AEndsWith: String;
+  const IgnoreCase: Boolean = True): Boolean;
 function PathExpand(const Filename: String): String; overload;
 function PathExpand(const Filename: String; out ExpandedFilename: String): Boolean; overload;
 function PathExtensionPos(const Filename: String): Integer;
@@ -33,15 +41,25 @@ function PathExtractName(const Filename: String): String;
 function PathExtractPath(const Filename: String): String;
 function PathHasInvalidCharacters(const S: String;
   const AllowDriveLetterColon: Boolean): Boolean;
+function PathHasSubstringAt(const S, Substring: String; const Offset: Integer;
+  const IgnoreCase: Boolean = True): Boolean;
 function PathIsRooted(const Filename: String): Boolean;
 function PathLastChar(const S: String): PChar;
 function PathLastDelimiter(const Delimiters, S: string): Integer;
 function PathLowercase(const S: String): String;
-function PathNormalizeSlashes(const S: String): String;
+function PathNormalizeSlashes(S: String): String;
 function PathPathPartLength(const Filename: String;
   const IncludeSlashesAfterPath: Boolean): Integer;
 function PathPos(Ch: Char; const S: String): Integer;
-function PathStartsWith(const S, AStartsWith: String): Boolean;
+function PathSame(const S1, S2: String): Boolean;
+function PathStartsWith(const S, AStartsWith: String;
+  const IgnoreCase: Boolean = True): Boolean;
+function PathStrCompare(const S1: PChar; const S1Length: Integer;
+  const S2: PChar; const S2Length: Integer;
+  const IgnoreCase: Boolean = True): Integer;
+function PathStrFind(const SSource: PChar; const SSourceLength: Integer;
+  const SValue: PChar; const SValueLength: Integer;
+  const IgnoreCase: Boolean = True): Integer;
 function PathStrNextChar(const S: PChar): PChar;
 function PathStrPrevChar(const Start, Current: PChar): PChar;
 function PathStrScan(const S: PChar; const C: Char): PChar;
@@ -99,12 +117,10 @@ end;
 
 function PathCharCompare(const S1, S2: PChar): Boolean;
 { Compares two first characters, and returns True if they are equal. }
-var
-  N, I: Integer;
 begin
-  N := PathStrNextChar(S1) - S1;
+  const N = PathStrNextChar(S1) - S1;
   if N = PathStrNextChar(S2) - S2 then begin
-    for I := 0 to N-1 do begin
+    for var I := 0 to N-1 do begin
       if S1[I] <> S2[I] then begin
         Result := False;
         Exit;
@@ -152,15 +168,49 @@ begin
   end;
 end;
 
-function PathCompare(const S1, S2: String): Integer;
-{ Compares two filenames, and returns 0 if they are equal. }
+function PathCompare(const S1, S2: String; const IgnoreCase: Boolean = True): Integer;
+{ Compares two strings (typically filenames, but they don't have to be) and
+  returns 0 for "equal", <0 for "less than", or >0 for "greater than".
+  An ordinal comparison is used, ignoring case by default. }
 begin
-  Result := CompareStr(PathLowercase(S1), PathLowercase(S2));
+  Result := PathStrCompare(PChar(S1), Length(S1), PChar(S2), Length(S2),
+    IgnoreCase);
 end;
 
-function PathSame(const S1, S2: String): Boolean;
+function PathConvertSuperToNormal(const Filename: String): String;
+{ Attempts to convert a "\\?\"-prefixed path to normal form, and returns the
+  new path. If the path cannot be converted, then Filename is returned
+  unchanged.
+  Reasons why a path cannot be converted include:
+  - The path doesn't start with "\\?\" (i.e., it's already in normal form)
+  - The prefix isn't followed by a drive letter and colon, or "UNC\".
+    ("\\?\GLOBALROOT\" isn't supported.)
+  - The path contains forward slashes or unnecessarily repeated backslashes.
+    This function doesn't support them.
+  Examples of conversions:
+    \\?\C:               -> C:\
+    \\?\C:\              -> C:\
+    \\?\C:\xxx           -> C:\xxx
+    \\?\UNC\server\share -> \\server\share
+}
 begin
-  Result := PathCompare(S1, S2) = 0;
+  if PathStartsWith(Filename, '\\?\UNC\') then
+    Exit('\\' + Copy(Filename, 9, Maxint));
+
+  const Len = Length(Filename);
+  if (Len >= 6) and PathStartsWith(Filename, '\\?\') and
+     CharInSet(UpCase(Filename[5]), ['A'..'Z']) and
+     (Filename[6] = ':') then begin
+    { "\\?\C:\" or "\\?\C:\xxx" }
+    if (Len >= 7) and (Filename[7] = '\') then
+      Exit(Copy(Filename, 5, Maxint));
+    { "\\?\C:" -- in this case we need to append "\" so the result is "C:\" }
+    if Len = 6 then
+      Exit(Copy(Filename, 5, Maxint) + '\');
+    { "\\?\C:xxx" -- not valid, can't convert }
+  end;
+
+  Result := Filename;
 end;
 
 function PathDrivePartLength(const Filename: String): Integer;
@@ -292,6 +342,15 @@ begin
   end;
 end;
 
+function PathEndsWith(const S, AEndsWith: String;
+  const IgnoreCase: Boolean = True): Boolean;
+{ Returns True if S ends with (or is equal to) AEndsWith.
+  An ordinal comparison is used, ignoring case by default. }
+begin
+  Result := PathHasSubstringAt(S, AEndsWith, Length(S) - Length(AEndsWith),
+    IgnoreCase);
+end;
+
 function PathExpand(const Filename: String; out ExpandedFilename: String): Boolean;
 { Like Delphi's ExpandFileName, but does proper error checking. }
 var
@@ -302,8 +361,14 @@ begin
   DWORD(Res) := GetFullPathName(PChar(Filename), SizeOf(Buf) div SizeOf(Buf[0]),
     Buf, FilePart);
   Result := (Res > 0) and (Res < SizeOf(Buf) div SizeOf(Buf[0]));
-  if Result then
-    SetString(ExpandedFilename, Buf, Res)
+  if Result then begin
+    SetString(ExpandedFilename, Buf, Res);
+    { Memory usage optimization: Most of the time, no changes are made to the
+      path. When that is the case, return a reference to the passed-in string
+      so that there aren't two identical strings on the heap. }
+    if ExpandedFilename = Filename then
+      ExpandedFilename := Filename;
+  end;
 end;
 
 function PathExpand(const Filename: String): String;
@@ -455,6 +520,27 @@ begin
   Result := False;
 end;
 
+function PathHasSubstringAt(const S, Substring: String; const Offset: Integer;
+  const IgnoreCase: Boolean = True): Boolean;
+{ Returns True if Substring exists in S at the specified zero-based offset
+  from the beginning of S.
+  An ordinal comparison is used, ignoring case by default.
+  Passing an out-of-range Offset value is allowed/safe. False is returned if
+  Offset is negative or if checking for Substring at Offset would go beyond
+  the end of S (partially or fully).
+  If Substring is empty and Offset = Length(S), then True is returned because
+  that is not considered going *beyond* the end of S. }
+begin
+  if Offset < 0 then
+    Exit(False);
+  const SubstringLen = Length(Substring);
+  if Offset > Length(S) - SubstringLen then
+    Exit(False);
+
+  Result := (PathStrCompare(PChar(S) + Offset, SubstringLen, PChar(Substring),
+    SubstringLen, IgnoreCase) = 0);
+end;
+
 function PathLastChar(const S: String): PChar;
 { Returns pointer to last character in the string. Returns nil if the string is
   empty. }
@@ -476,11 +562,11 @@ begin
   if (S = '') or (Delimiters = '') then
     Exit;
   P := Pointer(S);
-  E := @P[Length(S)];
+  E := P + Length(S);
   while P < E do begin
     if P^ <> #0 then begin
       if StrScan(PChar(Pointer(Delimiters)), P^) <> nil then
-        Result := (P - PChar(Pointer(S))) + 1;
+        Result := Integer((P - PChar(Pointer(S))) + 1);
       P := PathStrNextChar(P);
     end
     else
@@ -510,44 +596,114 @@ begin
   Result := 0;
 end;
 
-function PathNormalizeSlashes(const S: String): String;
+function PathNormalizeSlashes(S: String): String;
 { Returns S minus any superfluous slashes, and with any forward slashes
   converted to backslashes. For example, if S is 'C:\\\some//path', it returns
-  'C:\some\path'. Does not remove a double backslash at the beginning of the
-  string, since that signifies a UNC path. }
-var
-  Len, I: Integer;
+  'C:\some\path'.
+  If the string starts with two slashes ('\\') then those two characters are
+  ignored when collapsing repeated slashes. So:
+    \\server\share   -> \\server\share   (unchanged)
+    \\\server\share  -> \\\server\share  (unchanged)
+    \\\\server\share -> \\\server\share  (one backslash removed)
+  Note that paths with 3+ leading slashes don't actually work. But Windows'
+  GetFullPathName function, used by PathExpand, collapses slashes the same
+  way. Best to be consistent. }
 begin
+  const Len = Length(S);
+  var I: Integer;
+  for I := 1 to Len do
+    if S[I] = '/' then
+      S[I] := '\';
+
+  var EndIndex := 2;
+  if (Len >= 2) and (S[1] = '\') and (S[2] = '\') then
+    Inc(EndIndex, 2);
+
+  for I := Len downto EndIndex do
+    if (S[I] = '\') and (S[I-1] = '\') then
+      Delete(S, I, 1);
+
   Result := S;
-  Len := Length(Result);
-  I := 1;
-  while I <= Len do begin
-    if Result[I] = '/' then
-      Result[I] := '\';
-    Inc(I, PathCharLength(Result, I));
-  end;
-  I := 1;
-  while I < Length(Result) do begin
-    if (Result[I] = '\') and (Result[I+1] = '\') and (I > 1) then
-      Delete(Result, I+1, 1)
-    else
-      Inc(I, PathCharLength(Result, I));
-  end;
 end;
 
-function PathStartsWith(const S, AStartsWith: String): Boolean;
-{ Returns True if S starts with (or is equal to) AStartsWith. Uses path casing
-  rules. }
-var
-  AStartsWithLen: Integer;
+function PathSame(const S1, S2: String): Boolean;
+{ Returns True if the specified strings (typically filenames) are equal.
+  An ordinal comparison is used, ignoring case.
+  Like PathCompare, but faster for checking equality as it returns False
+  immediately if the strings are different lengths. }
 begin
-  AStartsWithLen := Length(AStartsWith);
-  if Length(S) = AStartsWithLen then
-    Result := (PathCompare(S, AStartsWith) = 0)
-  else if (Length(S) > AStartsWithLen) and not PathCharIsTrailByte(S, AStartsWithLen+1) then
-    Result := (PathCompare(Copy(S, 1, AStartsWithLen), AStartsWith) = 0)
+  Result := (Length(S1) = Length(S2)) and (PathCompare(S1, S2) = 0);
+end;
+
+function PathStartsWith(const S, AStartsWith: String;
+  const IgnoreCase: Boolean = True): Boolean;
+{ Returns True if S starts with (or is equal to) AStartsWith.
+  An ordinal comparison is used, ignoring case by default. }
+begin
+  Result := PathHasSubstringAt(S, AStartsWith, 0, IgnoreCase);
+end;
+
+{ Use our own CompareStringOrdinal declaration. The one in the Windows unit is
+  "delayload" (yuck), and the bIgnoreCase parameter type differs between
+  Delphi 11 and 12 (BOOL vs. DWORD). }
+function CompareStringOrdinal_static(lpString1: LPCWSTR; cchCount1: Integer;
+  lpString2: LPCWSTR; cchCount2: Integer; bIgnoreCase: BOOL): Integer; stdcall;
+  external kernel32 name 'CompareStringOrdinal';
+
+function PathStrCompare(const S1: PChar; const S1Length: Integer;
+  const S2: PChar; const S2Length: Integer;
+  const IgnoreCase: Boolean = True): Integer;
+{ Compares two strings and returns 0 for "equal", <0 for "less than", or
+  >0 for "greater than".
+  An ordinal comparison is used, ignoring case by default.
+  A length of -1 may be passed if a string is null-terminated; in that case,
+  the length is determined automatically. }
+begin
+  { As documented, CompareStringOrdinal only allows 1 for TRUE in the
+    bIgnoreCase parameter. "BOOL(Byte(IgnoreCase))" ensures we pass 1, not the
+    usual -1 Delphi passes when a Boolean is implicitly converted to BOOL. }
+  const CompareResult = CompareStringOrdinal_static(S1, S1Length, S2, S2Length,
+    BOOL(Byte(IgnoreCase)));
+  case CompareResult of
+    0: raise Exception.CreateFmt('PathStrCompare: CompareStringOrdinal failed (%u)',
+         [GetLastError]);
+    1..3: ;
   else
-    Result := False;
+    raise Exception.CreateFmt('PathStrCompare: CompareStringOrdinal result invalid (%d)',
+      [CompareResult]);
+  end;
+  Result := CompareResult - 2;
+end;
+
+{ Use our own FindStringOrdinal declaration. The one in the Windows unit is
+  "delayload" (yuck). }
+function FindStringOrdinal_static(dwFindStringOrdinalFlags: DWORD;
+  lpStringSource: LPCWSTR; cchSource: Integer;
+  lpStringValue: LPCWSTR; cchValue: Integer; bIgnoreCase: BOOL): Integer; stdcall;
+  external kernel32 name 'FindStringOrdinal';
+
+function PathStrFind(const SSource: PChar; const SSourceLength: Integer;
+  const SValue: PChar; const SValueLength: Integer;
+  const IgnoreCase: Boolean = True): Integer;
+{ Locates a value in a string, starting with the first character of the string.
+  Returns a 0-based index if found, and -1 otherwise.
+  An ordinal comparison is used, ignoring case by default.
+  A length of -1 may be passed if a string is null-terminated; in that case,
+  the length is determined automatically. }
+begin
+  { This is not documented for FindStringOrdinal, but like CompareStringOrdinal
+    it only allows 1 for TRUE in the bIgnoreCase parameter. See above. }
+  const CompareResult = FindStringOrdinal_static(FIND_FROMSTART, SSource, SSourceLength,
+    SValue, SValueLength, BOOL(Byte(IgnoreCase)));
+  if CompareResult = -1 then begin
+    const LastError = GetLastError;
+    if LastError <> ERROR_SUCCESS then
+      raise Exception.CreateFmt('PathStrFind: FindStringOrdinal failed (%u)',
+        [LastError]);
+  end else if not ((CompareResult >= 0) and (CompareResult < SSourceLength)) then
+    raise Exception.CreateFmt('PathStrFind: FindStringOrdinal result invalid (%d)',
+      [CompareResult]);
+  Result := CompareResult;
 end;
 
 function PathStrNextChar(const S: PChar): PChar;
